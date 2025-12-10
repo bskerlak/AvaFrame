@@ -5,6 +5,7 @@ Main functions for python DFA kernel
 import copy
 import logging
 import math
+import sys
 import os
 import pathlib
 import pickle
@@ -26,6 +27,7 @@ elif platform.system() == "Darwin":
     from multiprocessing.pool import ThreadPool as Pool
 else:
     from multiprocessing import Pool
+from multiprocessing.pool import ThreadPool
 
 # Local imports
 from avaframe.version import getVersion
@@ -137,7 +139,8 @@ def com1DFAMain(cfgMain, cfgInfo=""):
         configuration dataFrame of the simulations computed (if no simulation computed, configuration dataFrame
         of the already existing ones)
     """
-
+    log.addHandler(logging.StreamHandler(sys.stdout))  # Bojan print to stdout
+    log.setLevel("INFO")  # BOJAN (change from warning)
     avalancheDir = cfgMain["MAIN"]["avalancheDir"]
 
     # fetch type of cfgInfo
@@ -149,9 +152,9 @@ def com1DFAMain(cfgMain, cfgInfo=""):
         # preprocessing to create configuration objects for all simulations to run
         simDict, outDir, inputSimFiles, simDFExisting = com1DFAPreprocess(cfgMain, typeCfgInfo, cfgInfo)
 
-    log.info("The following simulations will be performed")
+    log.info(f"The following {len(simDict)} simulations will be performed (shown only in debug mode)")
     for key in simDict:
-        log.info("Simulation: %s" % key)
+        log.debug("Simulation: %s" % key)
         exportFlag = simDict[key]["cfgSim"]["EXPORTS"].getboolean("exportData")
         adaptDemPlot = simDict[key]["cfgSim"]["GENERAL"].getboolean("adaptDemPlot")
 
@@ -170,16 +173,25 @@ def com1DFAMain(cfgMain, cfgInfo=""):
         log.info("--- STARTING (potential) PARALLEL PART ----")
         # Get number of CPU Cores wanted
         nCPU = cfgUtils.getNumberOfProcesses(cfgMain, len(simDict))
+        print(f"BOJAN: nCPU wanted: {nCPU}")
+        #print(f"BOJAN: simDict = {simDict}")
+        #print(f"BOJAN: inputSimFiles = {inputSimFiles}")
+        print(f"BOJAN: avalancheDir = {avalancheDir}")
+        print(f"BOJAN: outDir = {outDir}")
 
         # Supply compute task with inputs
         com1DFACoreTaskWithInput = partial(com1DFACoreTask, simDict, inputSimFiles, avalancheDir, outDir)
 
         # Create parallel pool and run
-        # with multiprocessing.Pool(processes=nCPU) as pool:
-        with Pool(processes=nCPU) as pool:
-            results = pool.map(com1DFACoreTaskWithInput, simDict)
-            pool.close()
-            pool.join()
+        if nCPU == 1:
+            print(f"BOJAN sequential processing with {nCPU} processes")
+            results = [com1DFACoreTaskWithInput(arg) for arg in simDict]
+        else:
+            print(f"BOJAN starting parallel processing with {nCPU} processes")
+            with Pool(processes=nCPU) as pool:
+                results = pool.map(com1DFACoreTaskWithInput, simDict)
+                pool.close()
+                pool.join()
 
         # Split results to according structures
         for result in results:
@@ -188,14 +200,16 @@ def com1DFAMain(cfgMain, cfgInfo=""):
             dem = result[2]  # only last dem is used
             reportDictList.append(result[3])
 
-        timeNeeded = "%.2f" % (time.time() - startTime)
-        log.info("Overall (parallel) com1DFA computation took: %s s " % timeNeeded)
+        timeNeededParallel = "%.2f" % (time.time() - startTime)
+        log.info("Overall (parallel) com1DFA computation took: %s s " % timeNeededParallel)
         log.info("--- ENDING (potential) PARALLEL PART ----")
 
         # TODO: needs to be moved inside the outPlotAllPeakFunction
         # dem for plot chosen there
         dem = com1DFATools.chooseDemPlot(dem, adaptedDemBackground=adaptDemPlot)
         # postprocessing: writing report, creating plots
+        startTime = time.time()
+        log.info("--- START POSTPROCESSING ----")
         dem, plotDict, reportDictList, simDFNew = com1DFAPostprocess(
             simDF,
             tCPUDF,
@@ -205,8 +219,14 @@ def com1DFAMain(cfgMain, cfgInfo=""):
             reportDictList,
             exportData=exportFlag,
         )
+        timeNeededPostProcessing = "%.2f" % (time.time() - startTime)
+        log.info("--- ENDING POSTPROCESSING ----")
+        log.info("com1DFAPostprocess took: %s s " % timeNeededPostProcessing)
 
-        return dem, plotDict, reportDictList, simDFNew
+        time_needed_total = np.round(float(timeNeededParallel) + float(timeNeededPostProcessing), 2)
+        log.info(f"Time needed: {timeNeededParallel}s parallel and {timeNeededPostProcessing}s post-processing, total = {time_needed_total}s")
+
+        return dem, plotDict, reportDictList, simDFNew, time_needed_total
 
     else:
         log.warning("There is no simulation to be performed for releaseScenario")
@@ -231,15 +251,13 @@ def com1DFACoreTask(simDict, inputSimFiles, avalancheDir, outDir, cuSim):
     # fetch simHash for current sim
     simHash = simDict[cuSim]["simHash"]
 
-    log.info("%s runs as process: %s, %s" % (cuSim, os.getpid(), threading.current_thread().ident))
+    # log simulation name
+    log.info("Run simulation %s as process: %s and thread: %s" % (cuSim, os.getpid(), threading.current_thread().ident))
 
     # append configuration to dataframe
     simDF = cfgUtils.appendCgf2DF(simHash, cuSim, cfg, simDF)
 
-    # log simulation name
-    log.info("Run simulation: %s" % cuSim)
-
-    # ++++++++++PERFORM com1DFA SIMULAITON++++++++++++++++
+    # ++++++++++ PERFORM com1DFA SIMULAITON ++++++++++++++++
     (
         dem,
         reportDict,
@@ -304,45 +322,69 @@ def com1DFAPostprocess(simDF, tCPUDF, simDFExisting, cfgMain, dem, reportDictLis
     avalancheDir = cfgMain["MAIN"]["avalancheDir"]
 
     # prepare for writing configuration info
-    simDF = cfgUtils.convertDF2numerics(simDF)
+    simDF = cfgUtils.convertDF2numerics(simDF)  # BOJAN: takes 0.1s
+
     # add cpu time info to the dataframe
     simDF = simDF.join(tCPUDF)
 
+    log.info("Bojan: Writing sims to latestSims.csv")
     # write the actually simulated sims to a separate csv file,
     # this is used for the qgis connector
     cfgUtils.writeAllConfigurationInfo(avalancheDir, simDF, specDir="", csvName="latestSims.csv")
 
     # append new simulations configuration to old ones (if they exist),
     # return total dataFrame and write it to csv
+    
+    log.info("Bojan: Writing sims to allconfigs")
     simDFNew = pd.concat([simDF, simDFExisting], axis=0)
-    cfgUtils.writeAllConfigurationInfo(avalancheDir, simDFNew, specDir="")
+    cfgUtils.writeAllConfigurationInfo(avalancheDir, simDFNew, specDir="")  # BOJAN takes < 0.1s
 
     # write the actually simulated sims to a separate csv file
-    cfgUtils.writeAllConfigurationInfo(avalancheDir, simDFNew, specDir="")
+    log.info("Bojan: Writing sims to allconfigs (again)?")
+    cfgUtils.writeAllConfigurationInfo(avalancheDir, simDFNew, specDir="")  # Bojan: this is double?!
 
     # create plots and report
     reportDir = pathlib.Path(avalancheDir, "Outputs", modName, "reports")
     fU.makeADir(reportDir)
 
     # Generate plots for all peakFiles
-    if exportData:
-        # TODO: if adaptedDEM this needs to be changed!!
-        plotDict = oP.plotAllPeakFields(avalancheDir, cfgMain["FLAGS"], modName)
+    log.info("Generate plots for all peakfiles")
+    bojan_manual_override = True # don't do any of that
+    if bojan_manual_override == True:
+        plotDict = None
+        reportDictList = None
+        log.info("Skipping Plots (manual override)")
+        return dem, plotDict, reportDictList, simDFNew
     else:
-        plotDict = ""
-        # create contour line plot
-        reportDictList, _ = outCom1DFA.createContourPlot(reportDictList, avalancheDir, simDF)
+        if exportData:
+            log.info("exportData = True --> plotAllPeakFields")
+            # TODO: if adaptedDEM this needs to be changed!!
+            startTime = time.time()
+            plotDict = oP.plotAllPeakFields(avalancheDir, cfgMain["FLAGS"], modName)
+            timeNeededExportData = "%.2f" % (time.time() - startTime)
+            log.info("creating plots (plotAllPeakFields) took: %s s " % timeNeededExportData)
+        else:
+            log.info("exportData = False --> createContourPlot")
+            plotDict = ""
+            # create contour line plot
+            startTime = time.time()
+            reportDictList, _ = outCom1DFA.createContourPlot(reportDictList, avalancheDir, simDF)
+            timeNeededContourPlots = "%.2f" % (time.time() - startTime)
+            log.info("creating plots (createContourPlot) took: %s s " % timeNeededContourPlots)
 
-    if cfgMain["FLAGS"].getboolean("createReport"):
-        # write report
-        reportDictList = gR.checkAndCleanReportDictOnWinIssue872(reportDictList)
+        if cfgMain["FLAGS"].getboolean("createReport"):
+            log.info("Create report")
+            startTime = time.time()
+            reportDictList = gR.checkAndCleanReportDictOnWinIssue872(reportDictList)
 
-        gR.writeReport(
-            reportDir,
-            reportDictList,
-            cfgMain["FLAGS"].getboolean("reportOneFile"),
-            plotDict,
-        )
+            gR.writeReport(
+                reportDir,
+                reportDictList,
+                cfgMain["FLAGS"].getboolean("reportOneFile"),
+                plotDict,
+            )
+            timeNeededReport = "%.2f" % (time.time() - startTime)
+            log.info("creating report (writeReport) took: %s s " % timeNeededReport)
 
     return dem, plotDict, reportDictList, simDFNew
 
@@ -398,7 +440,7 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
         cfg, inputSimFiles["releaseScenario"], inputSimLines
     )
 
-    log.debug("Perform %s simulation" % cuSimName)
+    log.info(f"(com1DFACore) Perform simulation {cuSimName}")
 
     # +++++++++PERFORM SIMULAITON++++++++++++++++++++++
     # for timing the sims
@@ -423,7 +465,7 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
     writeMBFile(infoDict, avaDir, cuSimName)
 
     tCPUDFA = "%.2f" % (time.time() - startTime)
-    log.info(("cpu time DFA = %s s" % (tCPUDFA)))
+    log.info(("CPU time DFA = %s s" % (tCPUDFA)))
 
     # write report dictionary
     reportDict = createReportDict(avaDir, cuSimName, relName, inputSimLines, cfg, reportAreaInfo)
@@ -1164,7 +1206,7 @@ def initializeSimulation(cfg, outDir, demOri, inputSimLines, logName):
 
     # set relRaster
     relRaster = releaseLine["rasterData"]
-    log.info("Release area initialized using %s " % releaseLine["initializedFrom"])
+    log.debug("Release area initialized using %s " % releaseLine["initializedFrom"])
 
     # compute release area
     header = dem["header"]
@@ -1320,7 +1362,7 @@ def initializeSimulation(cfg, outDir, demOri, inputSimLines, logName):
     fields["entrMassRaster"] = entrMassRaster
     fields["entrEnthRaster"] = entrEnthRaster
     entreainableMass = np.nansum(fields["entrMassRaster"] * dem["areaRaster"])
-    log.info("Mass available for entrainment: %.2f kg" % (entreainableMass))
+    log.debug("Mass available for entrainment: %.2f kg" % (entreainableMass))
 
     log.debug("Initializing resistance area")
     cResRaster, detRaster, reportAreaInfo = initializeResistance(
@@ -1352,16 +1394,21 @@ def initializeSimulation(cfg, outDir, demOri, inputSimLines, logName):
             fields[fric + "Field"] = fricField["rasterData"]
 
     # plot release area scenario
-    outCom1DFA.plotReleaseScenarioView(
-        cfgGen["avalancheDir"],
-        releaseLine,
-        relThField,
-        reportAreaInfo,
-        dem,
-        ("Release Scenario %s" % logName),
-        logName,
-        inputSimLines,
-    )
+    bojan_no_relase_plot_override = True
+    if bojan_no_relase_plot_override == True:
+        log.info("BOJAN: skipping plotReleaseScenarioView")
+        return particles, fields, dem, reportAreaInfo
+    else:
+        outCom1DFA.plotReleaseScenarioView(
+            cfgGen["avalancheDir"],
+            releaseLine,
+            relThField,
+            reportAreaInfo,
+            dem,
+            ("Release Scenario %s" % logName),
+            logName,
+            inputSimLines,
+        )
 
     return particles, fields, dem, reportAreaInfo
 
@@ -1550,7 +1597,7 @@ def initializeParticles(cfg, releaseLine, dem, inputSimLines="", logName="", rel
         particles = geoTrans.checkParticlesInRelease(
             particles, releaseLine, cfg.getfloat("thresholdPointInPoly")
         )
-        log.info("Particles that lie outside of release polygon removed")
+        log.debug("Particles that lie outside of release polygon removed")
 
     # add a particles ID:
     # integer ranging from 0 to nPart in the initialisation.
@@ -1578,11 +1625,11 @@ def initializeParticles(cfg, releaseLine, dem, inputSimLines="", logName="", rel
         nPPK = particles["nPart"] * math.pi * csz**2 / aTot
     particles["nPPK"] = nPPK
 
-    log.info(
+    log.debug(
         "Initialized particles. MTot = %.2f kg, %s particles in %.2f cells."
         % (particles["mTot"], particles["nPart"], relCells)
     )
-    log.info(
+    log.debug(
         "Mass per particle = %.2f kg and particles per cell = %.2f."
         % (particles["mTot"] / particles["nPart"], partPerCell)
     )
@@ -2250,9 +2297,9 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
         tCPUtimeLoop = time.time() - startTime
         tCPU["timeLoop"] = tCPU["timeLoop"] + tCPUtimeLoop
     tCPU["nIter"] = nIter
-    log.info("Ending computation at time t = %f s", t - dt)
+    log.info("Ending computation at time t = %f s (PID: %s Thread %s)", t - dt, os.getpid(), threading.current_thread().ident)    
     log.debug("Saving results for time step t = %f s", t - dt)
-    log.info("MTot = %f kg, %s particles" % (particles["mTot"], particles["nPart"]))
+    log.debug("MTot = %f kg, %s particles" % (particles["mTot"], particles["nPart"]))
     log.debug("Computational performances:")
     log.debug(("cpu time Force = %s s" % (tCPU["timeForce"] / nIter)))
     log.debug(("cpu time ForceSPH = %s s" % (tCPU["timeForceSPH"] / nIter)))
@@ -2531,7 +2578,11 @@ def writeMBFile(infoDict, avaDir, logName):
         massDetrainedTotal[m] = massDetrainedTotal[m - 1] + massDetrained[m]
 
     # create mass plot
-    outCom1DFA.massPlot(infoDict, massDetrainedTotal, t, avaDir, logName)
+    bojan_nomassplot_override = True
+    if bojan_nomassplot_override == True:
+        pass
+    else:
+        outCom1DFA.massPlot(infoDict, massDetrainedTotal, t, avaDir, logName)
 
     # write mass balance info to log file
     massDir = pathlib.Path(avaDir, "Outputs", "com1DFA")
@@ -3076,9 +3127,14 @@ def prepareVarSimDict(standardCfg, inputSimFiles, variationDict, simNameExisting
 
     # loop over all simulations that shall be performed according to variationDF
     # one row per simulation
-    log.info("Start working on variations")
-    for row in variationDF.itertuples():
-        log.info("New line in variationDF-------")
+    log.info("---------------------------------------------------------------------------------------")
+    log.info(f"Start working on variations {len(variationDF)} parameter configurations, showing top5 and bottom5")
+    log.info(variationDF.drop(columns=['simTypeList']).head(5).to_string())
+    log.info(variationDF.drop(columns=['simTypeList']).tail(5).to_string())
+    log.info("---------------------------------------------------------------------------------------")
+    for row in variationDF.itertuples():    
+        log.debug("New line in variationDF (new parameter configuration): -------")
+        log.debug(row)
         # convert full configuration to dict
         cfgSim = cfgUtils.convertConfigParserToDict(standardCfg)
 

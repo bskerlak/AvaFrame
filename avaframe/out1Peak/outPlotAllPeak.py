@@ -2,7 +2,7 @@
 Functions to plot 2D simulation results: plot of all peak files at once
 
 """
-
+import sys
 import logging
 import numpy as np
 import matplotlib
@@ -26,6 +26,8 @@ import geopandas as gpd
 
 # create local logger
 log = logging.getLogger(__name__)
+log.addHandler(logging.StreamHandler(sys.stdout))  # Bojan print to stdout
+log.setLevel("INFO")  # BOJAN (change from warning)
 
 
 def plotAllPeakFields(avaDir, cfgFLAGS, modName, demData=""):
@@ -50,6 +52,8 @@ def plotAllPeakFields(avaDir, cfgFLAGS, modName, demData=""):
     """
 
     # Load all infos on simulations
+    log.info("Bojan: Load all infos on simulations")
+    return None  # for debug (huge compute saving potential!!!)
     avaDir = pathlib.Path(avaDir)
     inputDir = avaDir / "Outputs" / modName / "peakFiles"
     inDir = avaDir / "Inputs"
@@ -60,7 +64,7 @@ def plotAllPeakFields(avaDir, cfgFLAGS, modName, demData=""):
         peakFilesDF = (
             peakFilesDF.reset_index().merge(configurationDF, on=["simName", "modelType"]).set_index("index")
         )
-
+    log.info("Bojan: getDEMdata")
     if demData == "":
         demFile = gI.getDEMPath(avaDir)
         demDataRaster = IOf.readRaster(demFile, noDataToNan=True)
@@ -96,7 +100,7 @@ def plotAllPeakFields(avaDir, cfgFLAGS, modName, demData=""):
         resType = row["resType"]
         simType = row["simType"]
 
-        log.debug("now plot %s:" % (fileName))
+        log.info(f"Bojan: Create plot for {name} based on {fileName}" )
 
         plotName = outDir / ("%s.%s" % (name, pU.outputFormat))
 
