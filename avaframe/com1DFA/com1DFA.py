@@ -231,7 +231,7 @@ def com1DFAMain(cfgMain, cfgInfo=""):
     else:
         log.warning("There is no simulation to be performed for releaseScenario")
 
-        return 0, {}, [], ""
+        return 0, {}, [], "", 0
 
 
 def com1DFACoreTask(simDict, inputSimFiles, avalancheDir, outDir, cuSim):
