@@ -3059,7 +3059,7 @@ def exportFields(
         IOf.writeResultToRaster(
             dem["originalHeader"], resField, outFile, flip=True, useCompression=useCompression
         )
-        log.debug(
+        log.info(
             "Results parameter: %s has been exported to Outputs/peakFiles for time step: %.2f "
             % (resType, timeStep)
         )

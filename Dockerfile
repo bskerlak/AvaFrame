@@ -79,7 +79,7 @@ RUN uv pip install -r /tmp/avaframe_requirements.txt
 # ------------------------------------------------------------
 # Build & install avaframe
 # ------------------------------------------------------------
-WORKDIR /build
+WORKDIR /opt/avaframe
 COPY . .
 
 RUN uv run --active python setup.py build_ext --inplace && \
