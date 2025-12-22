@@ -4,7 +4,7 @@
 FROM python:3.12-slim
 
 # ------------------------------------------------------------
-# System dependencies (build once, cached)
+# System dependencies
 # ------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
@@ -80,8 +80,7 @@ RUN uv pip install -r /tmp/avaframe_requirements.txt
 # Build & install avaframe
 # ------------------------------------------------------------
 WORKDIR /build
-COPY avaframe/ avaframe/
-COPY setup.py pyproject.toml ./
+COPY . .
 
 RUN uv run --active python setup.py build_ext --inplace && \
     uv pip install .
@@ -90,5 +89,6 @@ RUN uv run --active python setup.py build_ext --inplace && \
 # Metadata
 # ------------------------------------------------------------
 ARG AVAFRAME_VERSION
+ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_AVAFRAME=${AVAFRAME_VERSION}
 LABEL org.opencontainers.image.title="avaframe_bojan"
 LABEL org.opencontainers.image.version=${AVAFRAME_VERSION}
