@@ -54,3 +54,5 @@ avaframe/com1DFA/*.so
 *.rcf
 /avaframe/data/tmpStdTests/
 /wheelhouse/
+
+.Dockerfile.swp

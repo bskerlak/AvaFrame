@@ -853,7 +853,7 @@ def writeAllConfigurationInfo(avaDir, simDF, specDir="", csvName="allConfigurati
     simDF: pandas dataFrame
         daaframe of the configuration
     specDir: str
-        path to a directory where simulation configuration shal be saved - optional
+        path to a directory where simulation configuration shall be saved - optional
     csvName: str
         name of csv file in which to save to - optional
 

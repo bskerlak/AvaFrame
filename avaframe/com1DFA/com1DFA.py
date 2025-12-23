@@ -215,6 +215,7 @@ def com1DFAMain(cfgMain, cfgInfo=""):
             tCPUDF,
             simDFExisting,
             cfgMain,
+            cfgInfo,
             dem,
             reportDictList,
             exportData=exportFlag,
@@ -283,7 +284,7 @@ def com1DFACoreTask(simDict, inputSimFiles, avalancheDir, outDir, cuSim):
     return simDF, tCPUDF, dem, reportDict
 
 
-def com1DFAPostprocess(simDF, tCPUDF, simDFExisting, cfgMain, dem, reportDictList, exportData):
+def com1DFAPostprocess(simDF, tCPUDF, simDFExisting, cfgMain, cfgInfo, dem, reportDictList, exportData):
     """postprocessing of simulation results: save configuration to csv, create plots and report
 
     Parameters
@@ -297,6 +298,8 @@ def com1DFAPostprocess(simDF, tCPUDF, simDFExisting, cfgMain, dem, reportDictLis
         simulations have been performed
     cfgMain: configparser object
         global avaframe config
+    cfgInfo: configparser object
+        load one or multiple override configuration files
     dem: dict
         dem dictionary
     reportDictList: list
@@ -327,35 +330,28 @@ def com1DFAPostprocess(simDF, tCPUDF, simDFExisting, cfgMain, dem, reportDictLis
     # add cpu time info to the dataframe
     simDF = simDF.join(tCPUDF)
 
-    log.info("Bojan: Writing sims to latestSims.csv")
-    # write the actually simulated sims to a separate csv file,
-    # this is used for the qgis connector
-    cfgUtils.writeAllConfigurationInfo(avalancheDir, simDF, specDir="", csvName="latestSims.csv")
+    if cfgInfo["BOJAN"]["writeLatestSims"] == True:
+        log.info("Bojan: Writing sims to latestSims.csv")
+        # write the actually simulated sims to a separate csv file,
+        # this is used for the qgis connector <-- remove (Bojan)
+        cfgUtils.writeAllConfigurationInfo(avalancheDir, simDF, specDir="", csvName="latestSims.csv")
 
     # append new simulations configuration to old ones (if they exist),
     # return total dataFrame and write it to csv
-    
     log.info("Bojan: Writing sims to allconfigs")
     simDFNew = pd.concat([simDF, simDFExisting], axis=0)
     cfgUtils.writeAllConfigurationInfo(avalancheDir, simDFNew, specDir="")  # BOJAN takes < 0.1s
 
-    # write the actually simulated sims to a separate csv file
-    log.info("Bojan: Writing sims to allconfigs (again)?")
-    cfgUtils.writeAllConfigurationInfo(avalancheDir, simDFNew, specDir="")  # Bojan: this is double?!
-
-    # create plots and report
-    reportDir = pathlib.Path(avalancheDir, "Outputs", modName, "reports")
-    fU.makeADir(reportDir)
-
-    # Generate plots for all peakFiles
-    log.info("Generate plots for all peakfiles")
-    bojan_manual_override = True # don't do any of that
-    if bojan_manual_override == True:
+    if cfgInfo["BOJAN"]["skipPlotsReports"] == True:
         plotDict = None
         reportDictList = None
         log.info("Skipping Plots (manual override)")
         return dem, plotDict, reportDictList, simDFNew
     else:
+        # Generate plots for all peakFiles
+        log.info("Generate plots for all peakfiles")
+        reportDir = pathlib.Path(avalancheDir, "Outputs", modName, "reports")
+        fU.makeADir(reportDir)
         if exportData:
             log.info("exportData = True --> plotAllPeakFields")
             # TODO: if adaptedDEM this needs to be changed!!
@@ -475,13 +471,23 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
     if cfg["EXPORTS"].getboolean("exportData") == False:
         reportDict["contours"] = contourDictXY
 
-    # write text file to Outputs/com1DFA/configurationFilesDone to indicate that this simulation has been performed
-    configFileName = "%s.ini" % cuSimName
-    for saveDir in ["configurationFilesDone", "configurationFilesLatest"]:
-        configDir = pathlib.Path(avaDir, "Outputs", "com1DFA", "configurationFiles", saveDir)
-        with open((configDir / configFileName), "w") as fi:
-            fi.write("see directory configurationFiles for info on config")
-        fi.close()
+    if cfg["BOJAN"].getboolean("writeConfigurationFilesDoneLatest") == True:
+        # write text file to Outputs/com1DFA/configurationFilesDone to indicate that this simulation has been performed
+        configFileName = "%s.ini" % cuSimName
+        for saveDir in ["configurationFilesDone", "configurationFilesLatest"]:
+            configDir = pathlib.Path(avaDir, "Outputs", "com1DFA", "configurationFiles", saveDir)
+            with open((configDir / configFileName), "w") as fi:
+                fi.write("see directory configurationFiles for info on config")
+            fi.close()
+    else:
+        # created during initialiseRunDirs in initialiseDirs.py where config is not passed
+        # thus it is easier to delete them 
+        for saveDir in ["configurationFilesDone", "configurationFilesLatest"]:
+            configDir = pathlib.Path(avaDir, "Outputs", "com1DFA", "configurationFiles", saveDir)
+            try:
+                os.rmdir(configDir)  # Bojan: delete empty directories (if exist _and_ empty)
+            except FileNotFoundError:
+                pass
 
     return dem, reportDict, cfg, infoDict["tCPU"], nPartInitial
 
@@ -2141,7 +2147,7 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
     log.debug("Saving results for time step t = %f s", t)
 
     # export initial time step
-    if cfg["EXPORTS"].getboolean("exportData"):
+    if cfg["BOJAN"].getboolean("exportDataInitial"):
         exportFields(cfg, t, fields, dem, outDir, cuSimName, TSave="initial")
 
         if "particles" in resTypes:
@@ -2259,7 +2265,7 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
             log.debug(("cpu time Fields = %s s" % (tCPU["timeField"] / nIter)))
 
             # Result parameters to be exported
-            if cfg["EXPORTS"].getboolean("exportData"):
+            if cfg["BOJAN"].getboolean("exportDataIntermediate"):
                 exportFields(cfg, t, fields, dem, outDir, cuSimName, TSave="intermediate")
 
                 # export particles dictionaries of saving time steps
@@ -2388,7 +2394,7 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
     resultsDFPath = pathlib.Path(cfgGen["avalancheDir"], "Outputs", "com1DFA", "resultsDF_%s.csv" % simHash)
     resultsDF.to_csv(resultsDFPath)
 
-    if cfg["EXPORTS"].getboolean("exportData"):
+    if cfg["BOJAN"].getboolean("exportDataFinal"):
         exportFields(cfg, t, fields, dem, outDir, cuSimName, TSave="final")
 
         # export particles dictionaries of saving time steps
@@ -3059,13 +3065,13 @@ def exportFields(
         IOf.writeResultToRaster(
             dem["originalHeader"], resField, outFile, flip=True, useCompression=useCompression
         )
-        log.info(
+        log.debug(
             "Results parameter: %s has been exported to Outputs/peakFiles for time step: %.2f "
             % (resType, timeStep)
         )
 
         if TSave == "final":
-            log.debug(
+            log.info(
                 "Results parameter: %s exported to Outputs/peakFiles for time step: %.2f - FINAL time step "
                 % (resType, timeStep)
             )
