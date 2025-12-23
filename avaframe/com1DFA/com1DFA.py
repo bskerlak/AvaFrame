@@ -342,11 +342,10 @@ def com1DFAPostprocess(simDF, tCPUDF, simDFExisting, cfgMain, cfgInfo, dem, repo
     simDFNew = pd.concat([simDF, simDFExisting], axis=0)
     cfgUtils.writeAllConfigurationInfo(avalancheDir, simDFNew, specDir="")  # BOJAN takes < 0.1s
 
-    if cfgInfo["BOJAN"]["skipPlotsReports"] == True:
+    if cfgInfo["BOJAN"].getboolean('skipPlotsReports'):
+        log.info("Bojan: Skipping Plots (manual override)")
         plotDict = None
         reportDictList = None
-        log.info("Skipping Plots (manual override)")
-        return dem, plotDict, reportDictList, simDFNew
     else:
         # Generate plots for all peakFiles
         log.info("Generate plots for all peakfiles")
@@ -1399,11 +1398,10 @@ def initializeSimulation(cfg, outDir, demOri, inputSimLines, logName):
             )
             fields[fric + "Field"] = fricField["rasterData"]
 
-    # plot release area scenario
-    bojan_no_relase_plot_override = True
-    if bojan_no_relase_plot_override == True:
-        log.info("BOJAN: skipping plotReleaseScenarioView")
-        return particles, fields, dem, reportAreaInfo
+    
+    # plot release area scenario unless skipped (Bojan)
+    if cfg["BOJAN"].getboolean('skipPlotReleaseScenario') == True:
+        log.debug("BOJAN: skipping plotReleaseScenarioView")
     else:
         outCom1DFA.plotReleaseScenarioView(
             cfgGen["avalancheDir"],
@@ -3071,7 +3069,7 @@ def exportFields(
         )
 
         if TSave == "final":
-            log.info(
+            log.debug(
                 "Results parameter: %s exported to Outputs/peakFiles for time step: %.2f - FINAL time step "
                 % (resType, timeStep)
             )
