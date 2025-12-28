@@ -331,9 +331,9 @@ def com1DFAPostprocess(simDF, tCPUDF, simDFExisting, cfgMain, cfgInfo, dem, repo
     simDF = simDF.join(tCPUDF)
 
     if cfgInfo["BOJAN"]["writeLatestSims"] == True:
-        log.info("Bojan: Writing sims to latestSims.csv")
+        log.info("Bojan: Writing sims to latestSims.csv (writeLatestSims)")
         # write the actually simulated sims to a separate csv file,
-        # this is used for the qgis connector <-- remove (Bojan)
+        # this is used for the qgis connector
         cfgUtils.writeAllConfigurationInfo(avalancheDir, simDF, specDir="", csvName="latestSims.csv")
 
     # append new simulations configuration to old ones (if they exist),
@@ -342,8 +342,8 @@ def com1DFAPostprocess(simDF, tCPUDF, simDFExisting, cfgMain, cfgInfo, dem, repo
     simDFNew = pd.concat([simDF, simDFExisting], axis=0)
     cfgUtils.writeAllConfigurationInfo(avalancheDir, simDFNew, specDir="")  # BOJAN takes < 0.1s
 
-    if cfgInfo["BOJAN"].getboolean('skipPlotsReports'):
-        log.info("Bojan: Skipping Plots (manual override)")
+    if cfgInfo["BOJAN"].getboolean('skipPlotsReports') == True:
+        log.info("Bojan: Skipping Plots (skipPlotsReports)")
         plotDict = None
         reportDictList = None
     else:
@@ -456,8 +456,11 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
         cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, simHash=simHash
     )
 
-    # write mass balance to File
-    writeMBFile(infoDict, avaDir, cuSimName)
+    if cfg["BOJAN"].getboolean("skipWriteMBFile") == True:
+        log.info("Bojan: Skipping writing mass balance files (skipWriteMBFile)")
+    else:
+        # write mass balance to File
+        writeMBFile(infoDict, avaDir, cuSimName)
 
     tCPUDFA = "%.2f" % (time.time() - startTime)
     log.info(("CPU time DFA = %s s" % (tCPUDFA)))
@@ -1401,7 +1404,7 @@ def initializeSimulation(cfg, outDir, demOri, inputSimLines, logName):
     
     # plot release area scenario unless skipped (Bojan)
     if cfg["BOJAN"].getboolean('skipPlotReleaseScenario') == True:
-        log.debug("BOJAN: skipping plotReleaseScenarioView")
+        log.debug("Bojan: Skipping plotting of release scenario (plotReleaseScenarioView")
     else:
         outCom1DFA.plotReleaseScenarioView(
             cfgGen["avalancheDir"],
@@ -2145,7 +2148,9 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
     log.debug("Saving results for time step t = %f s", t)
 
     # export initial time step
-    if cfg["BOJAN"].getboolean("exportDataInitial"):
+    if cfg["BOJAN"].getboolean("skipExportDataInitial") == True:
+        log.info("Bojan: Skipping initial timestep data export (skipExportDataInitial)")
+    else:
         exportFields(cfg, t, fields, dem, outDir, cuSimName, TSave="initial")
 
         if "particles" in resTypes:
@@ -2263,7 +2268,9 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
             log.debug(("cpu time Fields = %s s" % (tCPU["timeField"] / nIter)))
 
             # Result parameters to be exported
-            if cfg["BOJAN"].getboolean("exportDataIntermediate"):
+            if cfg["BOJAN"].getboolean("skipExportDataIntermediate") == True:
+                log.info("Bojan: Skipping intermediate timestep data export (skipExportDataIntermediate)")
+            else:
                 exportFields(cfg, t, fields, dem, outDir, cuSimName, TSave="intermediate")
 
                 # export particles dictionaries of saving time steps
@@ -2388,17 +2395,20 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
         )
         dtAna.exportData(mtiInfo, cfgRangeTime, "com1DFA")
 
-    # save resultsDF to file
-    resultsDFPath = pathlib.Path(cfgGen["avalancheDir"], "Outputs", "com1DFA", "resultsDF_%s.csv" % simHash)
-    resultsDF.to_csv(resultsDFPath)
+    if cfg["BOJAN"].getboolean("skipResultsDFtoFile"):
+        log.info("Bojan: Skipping writing resultsDF to file (skipResultsDFtoFile)")
+    else:
+        # save resultsDF to file
+        resultsDFPath = pathlib.Path(cfgGen["avalancheDir"], "Outputs", "com1DFA", "resultsDF_%s.csv" % simHash)
+        resultsDF.to_csv(resultsDFPath)
 
-    if cfg["BOJAN"].getboolean("exportDataFinal"):
+    if cfg["EXPORTS"].getboolean("exportData"):
         exportFields(cfg, t, fields, dem, outDir, cuSimName, TSave="final")
-
         # export particles dictionaries of saving time steps
         if "particles" in resTypes:
             savePartToPickle(particles, outDirData, cuSimName)
     else:
+        #TODO: understand if this is needed
         # fetch contourline info
         contourDictXY = outCom1DFA.fetchContCoors(
             dem["header"],
@@ -2406,17 +2416,21 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
             cfg["VISUALISATION"],
             cuSimName,
         )
-
-    # save contour line for each sim
-    contourDictXY = outCom1DFA.fetchContCoors(
-        dem["header"],
-        fields[cfg["VISUALISATION"]["contourResType"]],
-        cfg["VISUALISATION"],
-        cuSimName,
-    )
-    outDirDataCont = outDir / "contours"
-    fU.makeADir(outDirDataCont)
-    saveContToPickle(contourDictXY, outDirDataCont, cuSimName)
+        
+    if cfg["BOJAN"].getboolean("skipContoursPickle") == True:
+        log.debug("Bojan: Skipping export of countours to pickle (skipContoursPickle)")
+        contourDictXY = None
+    else:
+        # save contour line for each sim
+        contourDictXY = outCom1DFA.fetchContCoors(
+            dem["header"],
+            fields[cfg["VISUALISATION"]["contourResType"]],
+            cfg["VISUALISATION"],
+            cuSimName,
+        )
+        outDirDataCont = outDir / "contours"
+        fU.makeADir(outDirDataCont)
+        saveContToPickle(contourDictXY, outDirDataCont, cuSimName)
 
     # export particles properties for visulation
     if cfg["VISUALISATION"].getboolean("writePartToCSV"):
@@ -2584,7 +2598,7 @@ def writeMBFile(infoDict, avaDir, logName):
     # create mass plot
     bojan_nomassplot_override = True
     if bojan_nomassplot_override == True:
-        pass
+        log.info("Bojan: Skipping plotting the massplot (bojan_nomassplot_override)")
     else:
         outCom1DFA.massPlot(infoDict, massDetrainedTotal, t, avaDir, logName)
 
@@ -3055,26 +3069,31 @@ def exportFields(
             resField = resField * 0.001 / dem["areaRaster"]
 
         dataName = cuSimName + "_" + resType + "_" + "t%.2f" % (timeStep)
-        # create directory
-        outDirPeak = outDir / "peakFiles" / "timeSteps"
-        fU.makeADir(outDirPeak)
-        outFile = outDirPeak / dataName
-        useCompression = cfg["EXPORTS"].getboolean("useCompression")
-        IOf.writeResultToRaster(
-            dem["originalHeader"], resField, outFile, flip=True, useCompression=useCompression
-        )
-        log.debug(
-            "Results parameter: %s has been exported to Outputs/peakFiles for time step: %.2f "
-            % (resType, timeStep)
-        )
+        
+        if  cfg["BOJAN"].getboolean("skipExportDataFinal"):
+            log.info("Bojan: Skipping (additional) final timestep data export (skipExportDataFinal)")
+        else: 
+            # create peakFiles/timeSteps directory
+            outDirPeak = outDir / "peakFiles" / "timeSteps"
+            fU.makeADir(outDirPeak)
+            outFile = outDirPeak / dataName
+            useCompression = cfg["EXPORTS"].getboolean("useCompression")
+            IOf.writeResultToRaster(
+                dem["originalHeader"], resField, outFile, flip=True, useCompression=useCompression
+            )
+            log.debug(
+                "Results parameter: %s has been exported to Outputs/peakFiles for time step: %.2f "
+                % (resType, timeStep)
+            )
 
         if TSave == "final":
+            # Bojan: This creates the raster files for the final timestep without the time flag: KEEP THIS!
             log.debug(
                 "Results parameter: %s exported to Outputs/peakFiles for time step: %.2f - FINAL time step "
                 % (resType, timeStep)
             )
             dataName = cuSimName + "_" + resType
-            # create directory
+            # create peakFiles directory
             outDirPeakAll = outDir / "peakFiles"
             fU.makeADir(outDirPeakAll)
             outFile = outDirPeakAll / dataName
