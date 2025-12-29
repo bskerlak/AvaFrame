@@ -330,7 +330,7 @@ def com1DFAPostprocess(simDF, tCPUDF, simDFExisting, cfgMain, cfgInfo, dem, repo
     # add cpu time info to the dataframe
     simDF = simDF.join(tCPUDF)
 
-    if cfgInfo["BOJAN"]["writeLatestSims"] == True:
+    if cfgInfo["BOJAN"]["writeLatestSims"]:
         log.info("Bojan: Writing sims to latestSims.csv (writeLatestSims)")
         # write the actually simulated sims to a separate csv file,
         # this is used for the qgis connector
@@ -342,8 +342,8 @@ def com1DFAPostprocess(simDF, tCPUDF, simDFExisting, cfgMain, cfgInfo, dem, repo
     simDFNew = pd.concat([simDF, simDFExisting], axis=0)
     cfgUtils.writeAllConfigurationInfo(avalancheDir, simDFNew, specDir="")  # BOJAN takes < 0.1s
 
-    if cfgInfo["BOJAN"].getboolean('skipPlotsReports') == True:
-        log.info("Bojan: Skipping Plots (skipPlotsReports)")
+    if cfgInfo["BOJAN"].getboolean('skipPlotsReports'):
+        log.debug("Bojan: Skipping Plots (skipPlotsReports)")
         plotDict = None
         reportDictList = None
     else:
@@ -456,8 +456,8 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
         cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, simHash=simHash
     )
 
-    if cfg["BOJAN"].getboolean("skipWriteMBFile") == True:
-        log.info("Bojan: Skipping writing mass balance files (skipWriteMBFile)")
+    if cfg["BOJAN"].getboolean("skipWriteMBFile"):
+        log.debug("Bojan: Skipping writing mass balance files (skipWriteMBFile)")
     else:
         # write mass balance to File
         writeMBFile(infoDict, avaDir, cuSimName)
@@ -473,7 +473,7 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
     if cfg["EXPORTS"].getboolean("exportData") == False:
         reportDict["contours"] = contourDictXY
 
-    if cfg["BOJAN"].getboolean("writeConfigurationFilesDoneLatest") == True:
+    if cfg["BOJAN"].getboolean("writeConfigurationFilesDoneLatest"):
         # write text file to Outputs/com1DFA/configurationFilesDone to indicate that this simulation has been performed
         configFileName = "%s.ini" % cuSimName
         for saveDir in ["configurationFilesDone", "configurationFilesLatest"]:
@@ -1403,7 +1403,7 @@ def initializeSimulation(cfg, outDir, demOri, inputSimLines, logName):
 
     
     # plot release area scenario unless skipped (Bojan)
-    if cfg["BOJAN"].getboolean('skipPlotReleaseScenario') == True:
+    if cfg["BOJAN"].getboolean('skipPlotReleaseScenario'):
         log.debug("Bojan: Skipping plotting of release scenario (plotReleaseScenarioView")
     else:
         outCom1DFA.plotReleaseScenarioView(
@@ -2148,8 +2148,8 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
     log.debug("Saving results for time step t = %f s", t)
 
     # export initial time step
-    if cfg["BOJAN"].getboolean("skipExportDataInitial") == True:
-        log.info("Bojan: Skipping initial timestep data export (skipExportDataInitial)")
+    if cfg["BOJAN"].getboolean("skipExportDataInitial"):
+        log.debug("Bojan: Skipping initial timestep data export (skipExportDataInitial)")
     else:
         exportFields(cfg, t, fields, dem, outDir, cuSimName, TSave="initial")
 
@@ -2268,8 +2268,8 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
             log.debug(("cpu time Fields = %s s" % (tCPU["timeField"] / nIter)))
 
             # Result parameters to be exported
-            if cfg["BOJAN"].getboolean("skipExportDataIntermediate") == True:
-                log.info("Bojan: Skipping intermediate timestep data export (skipExportDataIntermediate)")
+            if cfg["BOJAN"].getboolean("skipExportDataIntermediate"):
+                log.debug("Bojan: Skipping intermediate timestep data export (skipExportDataIntermediate)")
             else:
                 exportFields(cfg, t, fields, dem, outDir, cuSimName, TSave="intermediate")
 
@@ -2396,7 +2396,7 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
         dtAna.exportData(mtiInfo, cfgRangeTime, "com1DFA")
 
     if cfg["BOJAN"].getboolean("skipResultsDFtoFile"):
-        log.info("Bojan: Skipping writing resultsDF to file (skipResultsDFtoFile)")
+        log.debug("Bojan: Skipping writing resultsDF to file (skipResultsDFtoFile)")
     else:
         # save resultsDF to file
         resultsDFPath = pathlib.Path(cfgGen["avalancheDir"], "Outputs", "com1DFA", "resultsDF_%s.csv" % simHash)
@@ -2417,7 +2417,7 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
             cuSimName,
         )
         
-    if cfg["BOJAN"].getboolean("skipContoursPickle") == True:
+    if cfg["BOJAN"].getboolean("skipContoursPickle"):
         log.debug("Bojan: Skipping export of countours to pickle (skipContoursPickle)")
         contourDictXY = None
     else:
@@ -2597,8 +2597,8 @@ def writeMBFile(infoDict, avaDir, logName):
 
     # create mass plot
     bojan_nomassplot_override = True
-    if bojan_nomassplot_override == True:
-        log.info("Bojan: Skipping plotting the massplot (bojan_nomassplot_override)")
+    if bojan_nomassplot_override:
+        log.debug("Bojan: Skipping plotting the massplot (bojan_nomassplot_override)")
     else:
         outCom1DFA.massPlot(infoDict, massDetrainedTotal, t, avaDir, logName)
 
@@ -3071,7 +3071,7 @@ def exportFields(
         dataName = cuSimName + "_" + resType + "_" + "t%.2f" % (timeStep)
         
         if  cfg["BOJAN"].getboolean("skipExportDataFinal"):
-            log.info("Bojan: Skipping (additional) final timestep data export (skipExportDataFinal)")
+            log.debug("Bojan: Skipping (additional) final timestep data export (skipExportDataFinal)")
         else: 
             # create peakFiles/timeSteps directory
             outDirPeak = outDir / "peakFiles" / "timeSteps"
@@ -3150,11 +3150,11 @@ def prepareVarSimDict(standardCfg, inputSimFiles, variationDict, simNameExisting
 
     # loop over all simulations that shall be performed according to variationDF
     # one row per simulation
-    log.info("---------------------------------------------------------------------------------------")
-    log.info(f"Start working on variations {len(variationDF)} parameter configurations, showing top5 and bottom5")
+    log.info("---------------------------------------------------------------------------------------------")
+    log.info(f"Bojan: Creating simulation dictionary for {len(variationDF)} parameter configurations, showing top5 and bottom5")
     log.info(variationDF.drop(columns=['simTypeList']).head(5).to_string())
     log.info(variationDF.drop(columns=['simTypeList']).tail(5).to_string())
-    log.info("---------------------------------------------------------------------------------------")
+    log.info("---------------------------------------------------------------------------------------------")
     for row in variationDF.itertuples():    
         log.debug("New line in variationDF (new parameter configuration): -------")
         log.debug(row)
