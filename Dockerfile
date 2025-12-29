@@ -70,6 +70,7 @@ shapely==2.0.6
 six==1.16.0
 snuggs==1.4.7
 tabulate==0.9.0
+tqdm==4.67.1
 tzdata==2024.1
 wheel
 REQ

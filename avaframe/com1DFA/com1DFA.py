@@ -14,6 +14,7 @@ import time
 from datetime import datetime
 from functools import partial
 from itertools import product
+from tqdm import tqdm
 
 import matplotlib.tri as tri
 import numpy as np
@@ -139,7 +140,17 @@ def com1DFAMain(cfgMain, cfgInfo=""):
         configuration dataFrame of the simulations computed (if no simulation computed, configuration dataFrame
         of the already existing ones)
     """
-    log.addHandler(logging.StreamHandler(sys.stdout))  # Bojan print to stdout
+
+    def has_stdout_handler(logger):
+        # only add the stdout handler if it's not yet added to this logger
+        for h in logger.handlers:
+            if isinstance(h, logging.StreamHandler) and h.stream is sys.stdout:
+                return True
+        return False
+
+    if not has_stdout_handler(log):
+        log.addHandler(logging.StreamHandler(sys.stdout))# BOJAN print to stdout
+    
     log.setLevel("INFO")  # BOJAN (change from warning)
     avalancheDir = cfgMain["MAIN"]["avalancheDir"]
 
@@ -152,7 +163,9 @@ def com1DFAMain(cfgMain, cfgInfo=""):
         # preprocessing to create configuration objects for all simulations to run
         simDict, outDir, inputSimFiles, simDFExisting = com1DFAPreprocess(cfgMain, typeCfgInfo, cfgInfo)
 
-    log.info(f"The following {len(simDict)} simulations will be performed (shown only in debug mode)")
+    n_simulations_parameter_variations = len(simDict)
+    # show simulation configs
+    log.debug(f"The following {n_simulations_parameter_variations} simulations (different parameter combinations) will be performed")
     for key in simDict:
         log.debug("Simulation: %s" % key)
         exportFlag = simDict[key]["cfgSim"]["EXPORTS"].getboolean("exportData")
@@ -162,7 +175,7 @@ def com1DFAMain(cfgMain, cfgInfo=""):
     reportDictList = list()
 
     # is there any simulation to run?
-    if bool(simDict):
+    if n_simulations_parameter_variations > 0:
         # reset simDF and timing
         simDF = pd.DataFrame()
         tCPUDF = pd.DataFrame()
@@ -170,28 +183,43 @@ def com1DFAMain(cfgMain, cfgInfo=""):
 
         startTime = time.time()
 
-        log.info("--- STARTING (potential) PARALLEL PART ----")
+        log.info("--- <START (potential) PARALLEL PART> ".ljust(95, "-"))
         # Get number of CPU Cores wanted
         nCPU = cfgUtils.getNumberOfProcesses(cfgMain, len(simDict))
-        print(f"BOJAN: nCPU wanted: {nCPU}")
-        #print(f"BOJAN: simDict = {simDict}")
-        #print(f"BOJAN: inputSimFiles = {inputSimFiles}")
-        print(f"BOJAN: avalancheDir = {avalancheDir}")
-        print(f"BOJAN: outDir = {outDir}")
+        log.info(f"BOJAN: nCPU wanted: {nCPU}")
+        #log.info(f"BOJAN: simDict = {simDict}")
+        #log.info(f"BOJAN: inputSimFiles = {inputSimFiles}")
+        log.info(f"BOJAN: avalancheDir = {avalancheDir}")
+        log.info(f"BOJAN: outDir = {outDir}")
+        log.info(f"BOJAN: len(simDict) = {len(simDict)}")
+
 
         # Supply compute task with inputs
         com1DFACoreTaskWithInput = partial(com1DFACoreTask, simDict, inputSimFiles, avalancheDir, outDir)
 
         # Create parallel pool and run
         if nCPU == 1:
-            print(f"BOJAN sequential processing with {nCPU} processes")
-            results = [com1DFACoreTaskWithInput(arg) for arg in simDict]
+            log.info(f"BOJAN sequential processing with {nCPU} processes")
+            results = [
+                com1DFACoreTaskWithInput(arg)
+                for arg in tqdm(
+                    simDict,
+                    total=n_simulations_parameter_variations,
+                    desc="com1DFA simulations",
+                    unit="sim"
+                    )
+            ]
         else:
-            print(f"BOJAN starting parallel processing with {nCPU} processes")
+            log.info(f"BOJAN starting parallel processing with {nCPU} processes")
+            results = []
             with Pool(processes=nCPU) as pool:
-                results = pool.map(com1DFACoreTaskWithInput, simDict)
-                pool.close()
-                pool.join()
+                for res in tqdm(
+                    pool.imap_unordered(com1DFACoreTaskWithInput, simDict),
+                    total=len(simDict),
+                    desc="com1DFA simulations",
+                    unit="sim"
+                ):
+                    results.append(res)
 
         # Split results to according structures
         for result in results:
@@ -202,14 +230,14 @@ def com1DFAMain(cfgMain, cfgInfo=""):
 
         timeNeededParallel = "%.2f" % (time.time() - startTime)
         log.info("Overall (parallel) com1DFA computation took: %s s " % timeNeededParallel)
-        log.info("--- ENDING (potential) PARALLEL PART ----")
+        log.info("--- </END (potential) PARALLEL PART> ".ljust(95, "-"))
 
         # TODO: needs to be moved inside the outPlotAllPeakFunction
         # dem for plot chosen there
         dem = com1DFATools.chooseDemPlot(dem, adaptedDemBackground=adaptDemPlot)
         # postprocessing: writing report, creating plots
         startTime = time.time()
-        log.info("--- START POSTPROCESSING ----")
+        log.info("--- <START POSTPROCESSING> ".ljust(95, "-"))
         dem, plotDict, reportDictList, simDFNew = com1DFAPostprocess(
             simDF,
             tCPUDF,
@@ -221,8 +249,8 @@ def com1DFAMain(cfgMain, cfgInfo=""):
             exportData=exportFlag,
         )
         timeNeededPostProcessing = "%.2f" % (time.time() - startTime)
-        log.info("--- ENDING POSTPROCESSING ----")
         log.info("com1DFAPostprocess took: %s s " % timeNeededPostProcessing)
+        log.info("--- </END POSTPROCESSING> ".ljust(95, "-"))
 
         time_needed_total = np.round(float(timeNeededParallel) + float(timeNeededPostProcessing), 2)
         log.info(f"Time needed: {timeNeededParallel}s parallel and {timeNeededPostProcessing}s post-processing, total = {time_needed_total}s")
@@ -253,7 +281,7 @@ def com1DFACoreTask(simDict, inputSimFiles, avalancheDir, outDir, cuSim):
     simHash = simDict[cuSim]["simHash"]
 
     # log simulation name
-    log.info("Run simulation %s as process: %s and thread: %s" % (cuSim, os.getpid(), threading.current_thread().ident))
+    log.debug("Run simulation %s as process: %s and thread: %s" % (cuSim, os.getpid(), threading.current_thread().ident))
 
     # append configuration to dataframe
     simDF = cfgUtils.appendCgf2DF(simHash, cuSim, cfg, simDF)
@@ -330,20 +358,20 @@ def com1DFAPostprocess(simDF, tCPUDF, simDFExisting, cfgMain, cfgInfo, dem, repo
     # add cpu time info to the dataframe
     simDF = simDF.join(tCPUDF)
 
-    if cfgInfo["BOJAN"]["writeLatestSims"]:
-        log.info("Bojan: Writing sims to latestSims.csv (writeLatestSims)")
+    if cfgInfo["BOJAN"].getboolean("writeLatestSims"):
+        log.info("BOJAN: Writing sims to latestSims.csv (writeLatestSims)")
         # write the actually simulated sims to a separate csv file,
         # this is used for the qgis connector
         cfgUtils.writeAllConfigurationInfo(avalancheDir, simDF, specDir="", csvName="latestSims.csv")
 
     # append new simulations configuration to old ones (if they exist),
     # return total dataFrame and write it to csv
-    log.info("Bojan: Writing sims to allconfigs")
+    log.info("BOJAN: Writing sims to allconfigs")
     simDFNew = pd.concat([simDF, simDFExisting], axis=0)
     cfgUtils.writeAllConfigurationInfo(avalancheDir, simDFNew, specDir="")  # BOJAN takes < 0.1s
 
     if cfgInfo["BOJAN"].getboolean('skipPlotsReports'):
-        log.debug("Bojan: Skipping Plots (skipPlotsReports)")
+        log.debug("BOJAN: Skipping Plots (skipPlotsReports)")
         plotDict = None
         reportDictList = None
     else:
@@ -435,7 +463,7 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
         cfg, inputSimFiles["releaseScenario"], inputSimLines
     )
 
-    log.info(f"(com1DFACore) Perform simulation {cuSimName}")
+    log.debug(f"(com1DFACore) Perform simulation {cuSimName}")
 
     # +++++++++PERFORM SIMULAITON++++++++++++++++++++++
     # for timing the sims
@@ -457,13 +485,13 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
     )
 
     if cfg["BOJAN"].getboolean("skipWriteMBFile"):
-        log.debug("Bojan: Skipping writing mass balance files (skipWriteMBFile)")
+        log.debug("BOJAN: Skipping writing mass balance files (skipWriteMBFile)")
     else:
         # write mass balance to File
         writeMBFile(infoDict, avaDir, cuSimName)
 
     tCPUDFA = "%.2f" % (time.time() - startTime)
-    log.info(("CPU time DFA = %s s" % (tCPUDFA)))
+    log.debug(f"CPU time DFA = {tCPUDFA} s")
 
     # write report dictionary
     reportDict = createReportDict(avaDir, cuSimName, relName, inputSimLines, cfg, reportAreaInfo)
@@ -487,7 +515,7 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
         for saveDir in ["configurationFilesDone", "configurationFilesLatest"]:
             configDir = pathlib.Path(avaDir, "Outputs", "com1DFA", "configurationFiles", saveDir)
             try:
-                os.rmdir(configDir)  # Bojan: delete empty directories (if exist _and_ empty)
+                os.rmdir(configDir)  # BOJAN: delete empty directories (if exist _and_ empty)
             except FileNotFoundError:
                 pass
 
@@ -1402,9 +1430,9 @@ def initializeSimulation(cfg, outDir, demOri, inputSimLines, logName):
             fields[fric + "Field"] = fricField["rasterData"]
 
     
-    # plot release area scenario unless skipped (Bojan)
+    # plot release area scenario unless skipped (BOJAN)
     if cfg["BOJAN"].getboolean('skipPlotReleaseScenario'):
-        log.debug("Bojan: Skipping plotting of release scenario (plotReleaseScenarioView")
+        log.debug("BOJAN: Skipping plotting of release scenario (plotReleaseScenarioView")
     else:
         outCom1DFA.plotReleaseScenarioView(
             cfgGen["avalancheDir"],
@@ -2149,7 +2177,7 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
 
     # export initial time step
     if cfg["BOJAN"].getboolean("skipExportDataInitial"):
-        log.debug("Bojan: Skipping initial timestep data export (skipExportDataInitial)")
+        log.debug("BOJAN: Skipping initial timestep data export (skipExportDataInitial)")
     else:
         exportFields(cfg, t, fields, dem, outDir, cuSimName, TSave="initial")
 
@@ -2233,8 +2261,8 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
         massTotal.append(particles["mTot"])
         timeM.append(t)
         pfvTimeMax.append(np.nanmax(fields["FV"]))
-        # print progress to terminal
-        print("time step t = %f s\r" % t, end="")
+        #print("time step t = %f s\r" % t, end="")
+        log.debug(f"time step t = {t:0.2f} s")
 
         # create range time diagram
         # determine avalanche front and flow characteristics in respective coodrinate system
@@ -2269,7 +2297,7 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
 
             # Result parameters to be exported
             if cfg["BOJAN"].getboolean("skipExportDataIntermediate"):
-                log.debug("Bojan: Skipping intermediate timestep data export (skipExportDataIntermediate)")
+                log.debug("BOJAN: Skipping intermediate timestep data export (skipExportDataIntermediate)")
             else:
                 exportFields(cfg, t, fields, dem, outDir, cuSimName, TSave="intermediate")
 
@@ -2308,7 +2336,7 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
         tCPUtimeLoop = time.time() - startTime
         tCPU["timeLoop"] = tCPU["timeLoop"] + tCPUtimeLoop
     tCPU["nIter"] = nIter
-    log.info("Ending computation at time t = %f s (PID: %s Thread %s)", t - dt, os.getpid(), threading.current_thread().ident)    
+    log.debug("Ending computation at time t = %f s (PID: %s Thread %s)", t - dt, os.getpid(), threading.current_thread().ident)    
     log.debug("Saving results for time step t = %f s", t - dt)
     log.debug("MTot = %f kg, %s particles" % (particles["mTot"], particles["nPart"]))
     log.debug("Computational performances:")
@@ -2396,7 +2424,7 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
         dtAna.exportData(mtiInfo, cfgRangeTime, "com1DFA")
 
     if cfg["BOJAN"].getboolean("skipResultsDFtoFile"):
-        log.debug("Bojan: Skipping writing resultsDF to file (skipResultsDFtoFile)")
+        log.debug("BOJAN: Skipping writing resultsDF to file (skipResultsDFtoFile)")
     else:
         # save resultsDF to file
         resultsDFPath = pathlib.Path(cfgGen["avalancheDir"], "Outputs", "com1DFA", "resultsDF_%s.csv" % simHash)
@@ -2418,7 +2446,7 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
         )
         
     if cfg["BOJAN"].getboolean("skipContoursPickle"):
-        log.debug("Bojan: Skipping export of countours to pickle (skipContoursPickle)")
+        log.debug("BOJAN: Skipping export of countours to pickle (skipContoursPickle)")
         contourDictXY = None
     else:
         # save contour line for each sim
@@ -2596,9 +2624,9 @@ def writeMBFile(infoDict, avaDir, logName):
         massDetrainedTotal[m] = massDetrainedTotal[m - 1] + massDetrained[m]
 
     # create mass plot
-    bojan_nomassplot_override = True
-    if bojan_nomassplot_override:
-        log.debug("Bojan: Skipping plotting the massplot (bojan_nomassplot_override)")
+    BOJAN_nomassplot_override = True
+    if BOJAN_nomassplot_override:
+        log.debug("BOJAN: Skipping plotting the massplot (BOJAN_nomassplot_override)")
     else:
         outCom1DFA.massPlot(infoDict, massDetrainedTotal, t, avaDir, logName)
 
@@ -3071,7 +3099,7 @@ def exportFields(
         dataName = cuSimName + "_" + resType + "_" + "t%.2f" % (timeStep)
         
         if  cfg["BOJAN"].getboolean("skipExportDataFinal"):
-            log.debug("Bojan: Skipping (additional) final timestep data export (skipExportDataFinal)")
+            log.debug("BOJAN: Skipping (additional) final timestep data export (skipExportDataFinal)")
         else: 
             # create peakFiles/timeSteps directory
             outDirPeak = outDir / "peakFiles" / "timeSteps"
@@ -3087,7 +3115,7 @@ def exportFields(
             )
 
         if TSave == "final":
-            # Bojan: This creates the raster files for the final timestep without the time flag: KEEP THIS!
+            # BOJAN: This creates the raster files for the final timestep without the time flag: KEEP THIS!
             log.debug(
                 "Results parameter: %s exported to Outputs/peakFiles for time step: %.2f - FINAL time step "
                 % (resType, timeStep)
@@ -3148,15 +3176,14 @@ def prepareVarSimDict(standardCfg, inputSimFiles, variationDict, simNameExisting
     # simulation info must contain: simName, releaseScenario, relFile, configuration as dictionary
     simDict = {}
 
-    # loop over all simulations that shall be performed according to variationDF
-    # one row per simulation
-    log.info("---------------------------------------------------------------------------------------------")
-    log.info(f"Bojan: Creating simulation dictionary for {len(variationDF)} parameter configurations, showing top5 and bottom5")
+    # loop over all simulations that shall be performed according to variationDF (one row per simulation)
+    log.info("".ljust(95, "-"))
+    log.info(f"BOJAN: Creating simulation dictionary for {len(variationDF)} parameter configurations, showing top5 and bottom5")
     log.info(variationDF.drop(columns=['simTypeList']).head(5).to_string())
     log.info(variationDF.drop(columns=['simTypeList']).tail(5).to_string())
-    log.info("---------------------------------------------------------------------------------------------")
+    log.info("".ljust(95, "-"))
     for row in variationDF.itertuples():    
-        log.debug("New line in variationDF (new parameter configuration): -------")
+        log.debug("New line in variationDF (new parameter configuration):")
         log.debug(row)
         # convert full configuration to dict
         cfgSim = cfgUtils.convertConfigParserToDict(standardCfg)
@@ -3394,7 +3421,7 @@ def prepareVarSimDict(standardCfg, inputSimFiles, variationDict, simNameExisting
         else:
             log.warning("Simulation %s already exists, not repeating it" % simName)
 
-    log.info("Done preparing variations -----")
+    log.info("Done preparing variations")
     # TODO: maybe treat this in some other way, i.e. adding an "finalDEM" or similar
     inputSimFiles.pop("demFile")
     inputSimFiles["demFile"] = pathToDemFull

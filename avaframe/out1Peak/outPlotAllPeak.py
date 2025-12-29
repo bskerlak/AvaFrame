@@ -26,7 +26,7 @@ import geopandas as gpd
 
 # create local logger
 log = logging.getLogger(__name__)
-log.addHandler(logging.StreamHandler(sys.stdout))  # Bojan print to stdout
+log.addHandler(logging.StreamHandler(sys.stdout))  # BOJAN print to stdout
 log.setLevel("INFO")  # BOJAN (change from warning)
 
 
@@ -52,7 +52,7 @@ def plotAllPeakFields(avaDir, cfgFLAGS, modName, demData=""):
     """
 
     # Load all infos on simulations
-    log.info("Bojan: Load all infos on simulations")
+    log.info("BOJAN: Load all infos on simulations")
     return None  # for debug (huge compute saving potential!!!)
     avaDir = pathlib.Path(avaDir)
     inputDir = avaDir / "Outputs" / modName / "peakFiles"
@@ -64,7 +64,7 @@ def plotAllPeakFields(avaDir, cfgFLAGS, modName, demData=""):
         peakFilesDF = (
             peakFilesDF.reset_index().merge(configurationDF, on=["simName", "modelType"]).set_index("index")
         )
-    log.info("Bojan: getDEMdata")
+    log.info("BOJAN: getDEMdata")
     if demData == "":
         demFile = gI.getDEMPath(avaDir)
         demDataRaster = IOf.readRaster(demFile, noDataToNan=True)
@@ -100,7 +100,7 @@ def plotAllPeakFields(avaDir, cfgFLAGS, modName, demData=""):
         resType = row["resType"]
         simType = row["simType"]
 
-        log.info(f"Bojan: Create plot for {name} based on {fileName}" )
+        log.info(f"BOJAN: Create plot for {name} based on {fileName}" )
 
         plotName = outDir / ("%s.%s" % (name, pU.outputFormat))
 
