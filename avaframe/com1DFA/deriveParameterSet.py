@@ -1173,9 +1173,13 @@ def createSimDict(avalancheDir, module, cfgInitial, inputSimFiles, simNameExisti
         module=module,
     )
 
-    # write full configuration (.ini file) to file
-    date = datetime.today()
-    fileName = "sourceConfiguration_" + "{:%d_%m_%Y_%H_%M_%S}".format(date)
-    cfgUtils.writeCfgFile(avalancheDir, module, modCfg, fileName=fileName)
+    bojan_override_write_sourceconfig = True
+    if bojan_override_write_sourceconfig:
+        log.debug("BOJAN: Skipping writing sourceConfiguration")
+    else:
+        # write full configuration (.ini file) to file
+        date = datetime.today()
+        fileName = "sourceConfiguration_" + "{:%d_%m_%Y_%H_%M_%S}".format(date)
+        cfgUtils.writeCfgFile(avalancheDir, module, modCfg, fileName=fileName)
 
     return simDict

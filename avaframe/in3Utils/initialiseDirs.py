@@ -5,6 +5,7 @@
 # Load modules
 import pathlib
 import logging
+import uuid
 
 # Local imports
 from avaframe.in3Utils import fileHandlerUtils as fU
@@ -38,9 +39,15 @@ def initialiseRunDirs(avaDir, modName, cleanRemeshedRasters):
     # Set directories outputs and current work
     outputDir = pathlib.Path(avaDir, 'Outputs', modName)
     fU.makeADir(outputDir)
-    workDir = pathlib.Path(avaDir, 'Work', modName)
+    
     configDoneDir = pathlib.Path(avaDir, 'Outputs', modName, 'configurationFiles', 'configurationFilesDone')
     fU.makeADir(configDoneDir)
+    
+    # BOJAN: add random hash to avoid name duplication
+    #workDir = pathlib.Path(avaDir, 'Work', modName)
+    hash_suffix = uuid.uuid4().hex[:8]  # 8 hex chars
+    workDir = pathlib.Path(avaDir, "Work", f"{modName}_{hash_suffix}")
+    
     # If Work directory already exists - error
     if workDir.is_dir():
         message = 'Work directory %s already exists - delete first!' % (workDir)
