@@ -245,7 +245,7 @@ def com1DFAMain(cfgMain, cfgInfo=""):
         log.debug("--- </END POSTPROCESSING> ".ljust(95, "-"))
 
         time_needed_total = np.round(float(timeNeededParallel) + float(timeNeededPostProcessing), 2)
-        log.info(f"Time needed: {timeNeededParallel}s parallel and {timeNeededPostProcessing}s post-processing, total = {time_needed_total}s")
+        log.debug(f"Time needed: {timeNeededParallel}s parallel and {timeNeededPostProcessing}s post-processing, total = {time_needed_total}s")
 
         return dem, plotDict, reportDictList, simDFNew, time_needed_total
 
@@ -3114,12 +3114,128 @@ def exportFields(
                 "Results parameter: %s exported to Outputs/peakFiles for time step: %.2f - FINAL time step "
                 % (resType, timeStep)
             )
+
+            from pathlib import Path
+            import numpy as np
+            import pandas as pd
+            import pyarrow as pa
+            import pyarrow.parquet as pq
+
+            def raster_to_parquet_partitioned(
+                    header,
+                    field,
+                    outdir,
+                    relTh,
+                    mu,
+                    xsi,
+                    tau0,
+                    filename="result.parquet",
+                ):
+                """
+                Convert a single raster (2D numpy array) to a flattened Parquet table with columns x, y, value.
+                Each raster cell is one row.
+                
+                Parameters
+                ----------
+                header : dict
+                    Raster header with keys: nrows, ncols, cellsize, xllcenter, yllcenter.
+                field : np.ndarray
+                    2D array of raster values (nrows x ncols)
+                outdir : str or Path
+                    Base directory; a 'PeakFiles' subfolder will be created.
+                filename : str
+                    Output Parquet filename
+                """
+                
+                outdir = Path(outdir)
+                # --- Parquet partition path (Hive-style) ---
+                part_dir = (
+                    outdir
+                    / "peakFiles"
+                    / f"relTh={relTh}"
+                    / f"mu={mu}"
+                    / f"xsi={xsi}"
+                    / f"tau0={tau0}"
+                )
+                part_dir.mkdir(parents=True, exist_ok=True)
+
+                # Read gridinfo from DEM header
+                nrows = header["nrows"]
+                ncols = header["ncols"]
+                cellsize = header["cellsize"]
+                x0 = header["xllcenter"]
+                y0 = header["yllcenter"]
+
+                # Compute (grid/pixel cell CENTERS!) coordinates & create grid
+                x_coords = x0 + np.arange(ncols) * cellsize
+                y_coords = y0 + np.arange(nrows) * cellsize  # SOUTH --> NORTH. AF considers the first line in a data array to be the southernmost one. NO flipping needed! (Bojan 2026-01-12)
+                xx, yy = np.meshgrid(x_coords, y_coords)
+
+                # 🔑 Flatten EVERYTHING explicitly
+                x_flat = xx.ravel()
+                y_flat = yy.ravel()
+                v_flat = field.ravel()
+
+                # Drop NaNs (Bojan TODO if needed)
+                mask = ~np.isnan(v_flat)  # TODO > threshold?
+                table = pa.table({
+                    "x": x_flat[mask],
+                    "y": y_flat[mask],
+                    "value": v_flat[mask],
+                })
+
+                # Build Arrow table directly
+                table = pa.table({
+                    "x": pa.array(x_flat, type=pa.float64()),
+                    "y": pa.array(y_flat, type=pa.float64()),
+                    "value": pa.array(v_flat, type=pa.float64()),
+                })
+
+                # write output
+                out_file = part_dir / f"{filename}.parquet"
+                pq.write_table(table, out_file, compression="snappy")
+
+                print(f"Parquet table saved to: {out_file}")
+
+                import matplotlib.pyplot as plt
+                plt.figure(figsize=(6, 3))
+                plt.imshow(field, origin="lower")  # AF considers the first line in a data array to be the southernmost one.
+                plt.imshow(resField, origin="lower")  # row 0 at the top (NumPy default)
+                plt.colorbar(label="value")
+                simname = f"[ relTh = {sim_relTh} | mu = {sim_mu} | xsi = {sim_xsi} | tau0 = {sim_tau0} ]"
+                plt.title(f"Simulation {simname} as stored in ndarray (w/o flipping)", fontsize=7)
+                plt.xlabel("X (column index)")
+                plt.ylabel("Y (row index)")
+                plt.tight_layout()
+                plot_file = part_dir / f"{filename}.png"
+                plt.savefig(plot_file, dpi=150)
+                plt.close()
+
+            # create output directory
             dataName = cuSimName + "_" + resType
-            # create peakFiles directory
             outDirPeakAll = outDir / "peakFiles"
             fU.makeADir(outDirPeakAll)
             outFile = outDirPeakAll / dataName
             useCompression = cfg["EXPORTS"].getboolean("useCompression")
+
+            # BOJAN new parquet + plot
+            sim_relTh = cfg.get('GENERAL', 'relTh')
+            sim_mu = cfg.get('GENERAL', 'muvoellmyminshear')
+            sim_xsi = cfg.get('GENERAL', 'xsivoellmyminshear')
+            sim_tau0 = cfg.get('GENERAL', 'tau0voellmyminshear')
+            assert all(v is not None for v in (sim_relTh, sim_mu, sim_xsi, sim_tau0)), f"One or more required GENERAL config values are missing: relTh = {sim_relTh} | mu = {sim_mu} | xsi = {sim_xsi} | tau0 = {sim_tau0}"
+            raster_to_parquet_partitioned(
+                dem["originalHeader"],
+                resField,
+                outDir,
+                relTh = sim_relTh,
+                mu = sim_mu,
+                xsi = sim_xsi,
+                tau0 = sim_tau0,
+                filename = resType
+            )
+
+            # This writes to raster file (same format as input .ASC, defined by DEM header)
             IOf.writeResultToRaster(
                 dem["originalHeader"], resField, outFile, flip=True, useCompression=useCompression
             )
