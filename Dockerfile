@@ -53,11 +53,13 @@ deepmerge==2.0
 fonttools==4.53.1
 kiwisolver==1.4.7
 matplotlib==3.9.2
+numpy==1.26.4
 orderly-set==5.2.2
 packaging==24.1
 pandas==2.2.2
 pillow==10.4.0
 psutil==6.0.0
+pyarrow==17.0.0
 pyparsing==3.1.4
 pyshp==2.3.1
 python-dateutil==2.9.0.post0
