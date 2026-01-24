@@ -67,6 +67,7 @@ pyparsing==3.1.4
 pyshp==2.3.1
 python-dateutil==2.9.0.post0
 pytz==2024.1
+ray[default]==2.53.0
 rasterio==1.3.11
 scipy==1.14.1
 seaborn==0.13.2
