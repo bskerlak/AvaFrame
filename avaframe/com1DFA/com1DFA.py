@@ -194,8 +194,7 @@ def com1DFAMain(cfgMain, cfgInfo=""):
         # Get number of CPU Cores wanted
         nCPU = cfgUtils.getNumberOfProcesses(cfgMain, len(simDict))
         log.debug(f"BOJAN: nCPU wanted: {nCPU}")
-        #log.info(f"BOJAN: simDict = {simDict}")
-        #log.info(f"BOJAN: inputSimFiles = {inputSimFiles}")
+        log.debug(f"BOJAN: inputSimFiles = {inputSimFiles}")
         log.debug(f"BOJAN: avalancheDir = {avalancheDir}")
         log.debug(f"BOJAN: outDir = {outDir}")
         log.debug(f"BOJAN: len(simDict) = {len(simDict)}")
@@ -502,6 +501,7 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
     if cfg["EXPORTS"].getboolean("exportData") == False:
         reportDict["contours"] = contourDictXY
 
+    # BOJAN: My understanding of this section is that if the simulation is successful, it writes the original config into configurationFilesDone and configurationFilesLatest. Will skipp this.
     if cfg["BOJAN"].getboolean("writeConfigurationFilesDoneLatest"):
         # write text file to Outputs/com1DFA/configurationFilesDone to indicate that this simulation has been performed
         configFileName = "%s.ini" % cuSimName
@@ -511,14 +511,16 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
                 fi.write("see directory configurationFiles for info on config")
             fi.close()
     else:
+        pass
+        # Bojan: I removed creation of these directories by commenting out cleanLatestConfigurationsDirAndCreate, hence all this is not needed anymore
         # created during initialiseRunDirs in initialiseDirs.py where config is not passed
         # thus it is easier to delete them 
-        for saveDir in ["configurationFilesDone", "configurationFilesLatest"]:
-            configDir = pathlib.Path(avaDir, "Outputs", "com1DFA", "configurationFiles", saveDir)
-            try:
-                os.rmdir(configDir)  # BOJAN: delete empty directories (if exist _and_ empty)
-            except FileNotFoundError:
-                pass
+        #for saveDir in ["configurationFilesDone", "configurationFilesLatest"]:
+        #    configDir = pathlib.Path(avaDir, "Outputs", "com1DFA", "configurationFiles", saveDir)
+        #    try:
+        #        os.rmdir(configDir)  # BOJAN: delete empty directories (if exist _and_ empty)
+        #    except FileNotFoundError:
+        #        pass
 
     return dem, reportDict, cfg, infoDict["tCPU"], nPartInitial
 
@@ -3536,13 +3538,14 @@ def prepareVarSimDict(standardCfg, inputSimFiles, variationDict, simNameExisting
                 "cfgSim": cfgSimObject,
             }
             if modName == "com1DFA":
-                # write configuration file, dont need to write cfg file for com8MoTPSA (does this later when creating rcf file)
-                cfgUtils.writeCfgFile(
-                    cfgSimObject["GENERAL"]["avalancheDir"],
-                    com1DFA,
-                    cfgSimObject,
-                    fileName=simName,
-                )
+                if cfgSim['BOJAN']["writeConfigurations"] == 'True':
+                    # write configuration file, dont need to write cfg file for com8MoTPSA (does this later when creating rcf file)
+                    cfgUtils.writeCfgFile(
+                        cfgSimObject["GENERAL"]["avalancheDir"],
+                        com1DFA,
+                        cfgSimObject,
+                        fileName=simName,
+                    )
         else:
             log.warning("Simulation %s already exists, not repeating it" % simName)
 

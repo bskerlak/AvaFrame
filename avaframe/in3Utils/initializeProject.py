@@ -220,7 +220,6 @@ def createFolderStruct(pathAvaName):
     '''creates the folder structure with avalanche base path'''
 
     Inputs = checkMakeDir(pathAvaName, 'Inputs')
-
     inputsSubDirs = ['RES', 'REL', 'SECREL', 'ENT',
                      'POINTS', 'LINES', 'POLYGONS', 'RELTH', "RASTERS"]
 
@@ -228,7 +227,6 @@ def createFolderStruct(pathAvaName):
         checkMakeDir(Inputs, cuDir)
 
     checkMakeDir(pathAvaName, 'Outputs')
-
     checkMakeDir(pathAvaName, 'Work')
 
 
