@@ -24,10 +24,7 @@ import pyarrow.parquet as pq
 from tqdm import tqdm
 
 import matplotlib.tri as tri
-import numpy as np
-import pandas as pd
 from shapely.geometry import Polygon as sPolygon
-
 
 if os.name == "nt":
     from multiprocessing.pool import ThreadPool as Pool
@@ -51,6 +48,7 @@ import avaframe.com1DFA.DFAfunctionsCython as DFAfunC
 import avaframe.com1DFA.DFAToolsCython as DFAtllsC
 import avaframe.com1DFA.damCom1DFA as damCom1DFA
 import avaframe.in2Trans.rasterUtils as IOf
+import avaframe.in2Trans.parquetUtils as IOfParquet
 import avaframe.in3Utils.fileHandlerUtils as fU
 from avaframe.in3Utils import cfgUtils
 import avaframe.out3Plot.outDebugPlots as debPlot
@@ -1900,12 +1898,12 @@ def initializeSecRelease(inputSimLines, dem, relRaster, reportAreaInfo):
             ]
             secondaryReleaseInfo["Name"] = [secondaryReleaseInfo["Name"]]
         else:
-            for secRelRatser, secRelName in zip(
+            for secRelRaster, secRelName in zip(
                 secondaryReleaseInfo["rasterData"], secondaryReleaseInfo["Name"]
             ):
                 noOverlaprasterList.append(
                     geoTrans.checkOverlap(
-                        secRelRatser,
+                        secRelRaster,
                         relRaster,
                         "Secondary release " + secRelName,
                         "Release",
@@ -3039,7 +3037,7 @@ def exportFields(
     cuSimName,
     TSave="intermediate",
     resTypesForced=[],
-    parquet_instead_of_raster=True
+    export_to_parquet=True
 ):
     """export result fields to Outputs directory according to result parameters and time step
     that can be specified in the configuration file
@@ -3125,101 +3123,6 @@ def exportFields(
                 % (resType, timeStep)
             )
 
-            def raster_to_parquet_partitioned(
-                    header,
-                    field,
-                    outdir,
-                    anriss,
-                    relTh,
-                    mu,
-                    xsi,
-                    tau0,
-                    filename="result.parquet",
-                    plot=False
-                ):
-                """
-                Convert a single raster (2D numpy array) to a flattened Parquet table with columns x, y, value.
-                Each raster cell is one row.
-                
-                Parameters
-                ----------
-                header : dict
-                    Raster header with keys: nrows, ncols, cellsize, xllcenter, yllcenter.
-                field : np.ndarray
-                    2D array of raster values (nrows x ncols)
-                outdir : str or Path
-                    Base directory for results.
-                filename : str
-                    Output Parquet filename
-                plot : bool
-                    Create plot?
-                """
-                
-                outdir = Path(outdir)
-                # --- Parquet partition path (Hive-style) ---
-                part_dir = (
-                    outdir
-                    / f"{anriss}"
-                    / f"relTh={relTh}"
-                    / f"mu={mu}"
-                    / f"xsi={xsi}"
-                    / f"tau0={tau0}"
-                )
-                part_dir.mkdir(parents=True, exist_ok=True)
-
-                # Read gridinfo from DEM header
-                nrows = header["nrows"]
-                ncols = header["ncols"]
-                cellsize = header["cellsize"]
-                x0 = header["xllcenter"]
-                y0 = header["yllcenter"]
-
-                # Compute (grid/pixel cell CENTERS!) coordinates & create grid
-                x_coords = x0 + np.arange(ncols) * cellsize
-                y_coords = y0 + np.arange(nrows) * cellsize  # SOUTH --> NORTH. AF considers the first line in a data array to be the southernmost one. NO flipping needed! (Bojan 2026-01-12)
-                xx, yy = np.meshgrid(x_coords, y_coords)
-
-                # 🔑 Flatten EVERYTHING explicitly
-                x_flat = xx.ravel()
-                y_flat = yy.ravel()
-                v_flat = field.ravel()
-
-                # Drop NaNs (Bojan TODO if needed)
-                mask = ~np.isnan(v_flat)  # TODO > threshold?
-                table = pa.table({
-                    "x": x_flat[mask],
-                    "y": y_flat[mask],
-                    "value": v_flat[mask],
-                })
-
-                # Build Arrow table directly
-                table = pa.table({
-                    "x": pa.array(x_flat, type=pa.float32()),
-                    "y": pa.array(y_flat, type=pa.float32()),
-                    "value": pa.array(v_flat, type=pa.float32()),
-                })
-
-                # write output
-                out_file = part_dir / f"{filename}.parquet"
-                pq.write_table(table, out_file, compression="snappy")
-
-                log.debug(f"Parquet table saved to: {out_file}")
-
-                if plot:
-                    import matplotlib.pyplot as plt
-                    plt.figure(figsize=(6, 3))
-                    plt.imshow(field, origin="lower")  # AF considers the first line in a data array to be the southernmost one.
-                    plt.imshow(resField, origin="lower")  # row 0 at the top (NumPy default)
-                    plt.colorbar(label="value")
-                    simname = f"[ relTh = {sim_relTh} | mu = {sim_mu} | xsi = {sim_xsi} | tau0 = {sim_tau0} ]"
-                    plt.title(f"Simulation {simname} as stored in ndarray (w/o flipping)", fontsize=7)
-                    plt.xlabel("X (column index)")
-                    plt.ylabel("Y (row index)")
-                    plt.tight_layout()
-                    plot_file = part_dir / f"{filename}.png"
-                    plt.savefig(plot_file, dpi=150)
-                    plt.close()
-
             # create output directory
             dataName = cuSimName + "_" + resType
             outDirPeakAll = outDir / "peakFiles"
@@ -3227,18 +3130,21 @@ def exportFields(
             outFile = outDirPeakAll / dataName
             useCompression = cfg["EXPORTS"].getboolean("useCompression")
             
-            # BOJAN new parquet + plot
-            if parquet_instead_of_raster:
+            # BOJAN new parquet + .asc
+            if export_to_parquet:
                 sim_relTh = cfg.get('GENERAL', 'relTh')
                 sim_mu = cfg.get('GENERAL', 'muvoellmyminshear')
                 sim_xsi = cfg.get('GENERAL', 'xsivoellmyminshear')
                 sim_tau0 = cfg.get('GENERAL', 'tau0voellmyminshear')
                 assert all(v is not None for v in (sim_relTh, sim_mu, sim_xsi, sim_tau0)), f"One or more required GENERAL config values are missing: relTh = {sim_relTh} | mu = {sim_mu} | xsi = {sim_xsi} | tau0 = {sim_tau0}"
                 
+                # Output directory
                 outdir_raster = outDir.parents[2] / "results"
                 fU.makeADir(outdir_raster)
                 sim_anriss = cuSimName.split("_")[0]  # Get name of Anriss (e.g. Anriss0005)
-                raster_to_parquet_partitioned(
+
+                # Write raster data as parquet
+                IOfParquet.raster_to_parquet_partitioned(
                     dem["originalHeader"],
                     resField,
                     outdir_raster,
@@ -3250,11 +3156,11 @@ def exportFields(
                     filename = resType
                 )
 
-                # TODO remove this later
-                # This writes to raster file (same format as input .ASC, defined by DEM header)
-                IOf.writeResultToRaster(
-                    dem["originalHeader"], resField, outFile, flip=True, useCompression=useCompression
-                )
+            # TODO remove this later
+            # This writes to raster file (same format as input  (defined by DEM header), hence here = .ASC)
+            IOf.writeResultToRaster(
+                dem["originalHeader"], resField, outFile, flip=True, useCompression=useCompression
+            )
 
 
 def prepareVarSimDict(standardCfg, inputSimFiles, variationDict, simNameExisting="", module=com1DFA):
