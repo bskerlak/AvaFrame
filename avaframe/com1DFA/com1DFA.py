@@ -2472,10 +2472,9 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
         countParticleCsv = countParticleCsv + 1
 
     if particles["nExitedParticles"] != 0.0:
-        log.warning(
-            "%d particles have been removed during simulation because they exited the domain"
-            % particles["nExitedParticles"]
-        )
+        error_msg = f"{particles['nExitedParticles']} particles exited the domain! Simulation domain is too small."
+        log.error(error_msg)
+        raise ValueError(error_msg)  # This will trigger your 'except' block
 
     return Tsave, infoDict, contourDictXY
 
