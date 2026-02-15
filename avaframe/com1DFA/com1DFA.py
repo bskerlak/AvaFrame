@@ -3132,7 +3132,6 @@ def exportFields(
             
             # BOJAN new parquet + .asc
             if export_to_parquet:
-                #TODO get area!
                 sim_relTh = cfg.get('GENERAL', 'relTh')
                 sim_mu = cfg.get('GENERAL', 'muvoellmyminshear')
                 sim_xsi = cfg.get('GENERAL', 'xsivoellmyminshear')
@@ -3142,7 +3141,6 @@ def exportFields(
                 # Output directory
                 results_root_dir = outDir.parents[2] / "results"
                 fU.makeADir(results_root_dir)
-                sim_anriss = cuSimName.split("_")[0]  # Get name of Anriss (e.g. Anriss0005)
 
                 # special for X, Y and Area due to new coordinates first logic
                 folder_list = str(outDir.parents[1].name).split("_")
@@ -3180,7 +3178,7 @@ def exportFields(
                 assert X_value is not None, f"Could not find X coordinate (Xxxx) in: {outDir.parents[1].name}"
                 assert Y_value is not None, f"Could not find Y coordinate (Yxxx) in: {outDir.parents[1].name}"
 
-                # Write raster data as parquet
+                # Write result (raster) data as parquet
                 IOfParquet.raster_to_parquet_partitioned(
                     dem["originalHeader"],
                     resField,

@@ -9,7 +9,9 @@ import pyarrow.parquet as pq
 log = logging.getLogger("com1DFA")
 
 AVAFRAME_SCHEMA = pa.schema([
-    pa.field("anriss", pa.string(), nullable=False),
+    pa.field("X_rel_center", pa.int64(), nullable=False),
+    pa.field("Y_rel_center", pa.int64(), nullable=False),
+    pa.field("area", pa.int16(), nullable=False),
     pa.field("relTh", pa.float32(), nullable=False),
     pa.field("mu", pa.float32(), nullable=False),
     pa.field("xsi", pa.int16(), nullable=False),
@@ -74,17 +76,17 @@ def calculate_relative_checksum(x_flat, y_flat, v_flat, precision=1e6):
     return int(checksum)
 
 def raster_to_parquet_partitioned(
-    header,
-    field,
-    outdir,
-    X,
-    Y,
-    area,
-    relTh,
-    mu,
-    xsi,
-    tau0,
-    filename="result.parquet",
+        header,
+        field,
+        outdir,
+        X,
+        Y,
+        area,
+        relTh,
+        mu,
+        xsi,
+        tau0,
+        filename="result.parquet",
     ):
     """
     Convert a single raster (2D numpy array) to a flattened Parquet table with columns x, y, value.
@@ -108,8 +110,8 @@ def raster_to_parquet_partitioned(
     # --- Parquet partition path (Hive-style) ---
     parquet_partitioned_dir = (
         outdir
-        / f"X={X}"
-        / f"Y={Y}"
+        / f"X_rel_center={X}"
+        / f"Y_rel_center={Y}"
         / f"area={area}"
         / f"relTh={relTh}"
         / f"mu={mu}"
@@ -144,7 +146,9 @@ def raster_to_parquet_partitioned(
     # Build the data dictionary with explicit casting
     # We create full arrays for the partitioning columns so they aren't "dictionaries"
     data = {
-        "anriss": pa.array([anriss] * num_rows, type=pa.string()),
+        "X_rel_center": pa.array(np.full(num_rows, X, dtype=np.int64), type=pa.int64()),
+        "Y_rel_center": pa.array(np.full(num_rows, Y, dtype=np.int64), type=pa.int64()),
+        "area": pa.array(np.full(num_rows, area, dtype=np.int16), type=pa.int16()),
         "relTh": pa.array(np.full(num_rows, relTh, dtype=np.float32), type=pa.float32()),
         "mu": pa.array(np.full(num_rows, mu, dtype=np.float32), type=pa.float32()),
         "xsi": pa.array(np.full(num_rows, xsi, dtype=np.int16), type=pa.int16()),
