@@ -11,6 +11,7 @@ import pathlib
 import pickle
 import platform
 import time
+import re
 from datetime import datetime
 from functools import partial
 from itertools import product
@@ -3131,6 +3132,7 @@ def exportFields(
             
             # BOJAN new parquet + .asc
             if export_to_parquet:
+                #TODO get area!
                 sim_relTh = cfg.get('GENERAL', 'relTh')
                 sim_mu = cfg.get('GENERAL', 'muvoellmyminshear')
                 sim_xsi = cfg.get('GENERAL', 'xsivoellmyminshear')
@@ -3138,16 +3140,54 @@ def exportFields(
                 assert all(v is not None for v in (sim_relTh, sim_mu, sim_xsi, sim_tau0)), f"One or more required GENERAL config values are missing: relTh = {sim_relTh} | mu = {sim_mu} | xsi = {sim_xsi} | tau0 = {sim_tau0}"
                 
                 # Output directory
-                outdir_raster = outDir.parents[2] / "results"
-                fU.makeADir(outdir_raster)
+                results_root_dir = outDir.parents[2] / "results"
+                fU.makeADir(results_root_dir)
                 sim_anriss = cuSimName.split("_")[0]  # Get name of Anriss (e.g. Anriss0005)
+
+                # special for X, Y and Area due to new coordinates first logic
+                folder_list = str(outDir.parents[1].name).split("_")
+                re_area = re.compile(r'^A(\d+)$')
+                re_x = re.compile(r'^X(\d+)$')
+                re_y = re.compile(r'^Y(\d+)$')
+                area_value = None
+                X_value = None
+                Y_value = None
+
+                for item in folder_list:
+                    # Check Area
+                    if not area_value:
+                        area_match = re_area.search(item)
+                        if area_match:
+                            area_value = area_match.group(1)
+                            continue
+                    
+                    # Check X coordinate
+                    if not X_value:
+                        x_match = re_x.search(item)
+                        if x_match:
+                            X_value = x_match.group(1)
+                            continue
+                            
+                    # Check Y coordinate
+                    if not Y_value:
+                        y_match = re_y.search(item)
+                        if y_match:
+                            Y_value = y_match.group(1)
+                            continue
+
+                # 2. Safety Checks
+                assert area_value is not None, f"Could not find Area (Axxx) in: {outDir.parents[1].name}"
+                assert X_value is not None, f"Could not find X coordinate (Xxxx) in: {outDir.parents[1].name}"
+                assert Y_value is not None, f"Could not find Y coordinate (Yxxx) in: {outDir.parents[1].name}"
 
                 # Write raster data as parquet
                 IOfParquet.raster_to_parquet_partitioned(
                     dem["originalHeader"],
                     resField,
-                    outdir_raster,
-                    anriss = sim_anriss,
+                    results_root_dir,
+                    X = X_value,
+                    Y = Y_value,
+                    area = area_value,
                     relTh = sim_relTh,
                     mu = sim_mu,
                     xsi = sim_xsi,

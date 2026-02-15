@@ -77,7 +77,9 @@ def raster_to_parquet_partitioned(
     header,
     field,
     outdir,
-    anriss,
+    X,
+    Y,
+    area,
     relTh,
     mu,
     xsi,
@@ -104,15 +106,17 @@ def raster_to_parquet_partitioned(
 
     outdir = Path(outdir)
     # --- Parquet partition path (Hive-style) ---
-    part_dir = (
+    parquet_partitioned_dir = (
         outdir
-        / f"{anriss}"
+        / f"X={X}"
+        / f"Y={Y}"
+        / f"area={area}"
         / f"relTh={relTh}"
         / f"mu={mu}"
         / f"xsi={xsi}"
         / f"tau0={tau0}"
     )
-    part_dir.mkdir(parents=True, exist_ok=True)
+    parquet_partitioned_dir.mkdir(parents=True, exist_ok=True)
 
     # Read gridinfo from DEM header
     nrows = header["nrows"]
@@ -167,7 +171,7 @@ def raster_to_parquet_partitioned(
     table = table.replace_schema_metadata({**existing_meta, **custom_meta})
 
     # write output
-    out_file = part_dir / f"{filename}.parquet"
+    out_file = parquet_partitioned_dir / f"{filename}.parquet"
     pq.write_table(table, out_file, compression="snappy")
 
     log.debug(f"Parquet table saved to: {out_file}")
