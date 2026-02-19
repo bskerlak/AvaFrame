@@ -3139,7 +3139,7 @@ def exportFields(
                 assert all(v is not None for v in (sim_relTh, sim_mu, sim_xsi, sim_tau0)), f"One or more required GENERAL config values are missing: relTh = {sim_relTh} | mu = {sim_mu} | xsi = {sim_xsi} | tau0 = {sim_tau0}"
                 
                 # Output directory
-                results_root_dir = outDir.parents[2] / "results"
+                results_root_dir = outDir.parents[2] / "batch_data_lake_bronze"
                 fU.makeADir(results_root_dir)
 
                 # special for X, Y and Area due to new coordinates first logic
