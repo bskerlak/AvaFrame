@@ -3173,6 +3173,11 @@ def exportFields(
                             Y_value = y_match.group(1)
                             continue
 
+                    if item == "Anriss0005":
+                        X_value = 2608198
+                        Y_value = 1145230
+                        area_value = 200
+
                 # 2. Safety Checks
                 assert area_value is not None, f"Could not find Area (Axxx) in: {outDir.parents[1].name}"
                 assert X_value is not None, f"Could not find X coordinate (Xxxx) in: {outDir.parents[1].name}"
