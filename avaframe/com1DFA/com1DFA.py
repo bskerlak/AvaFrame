@@ -1582,10 +1582,10 @@ def initializeParticles(cfg, releaseLine, dem, inputSimLines="", logName="", rel
         )
         hPartArray = np.asarray(hPartArray)
         # for the MPPKR option use hPart and aPart to define the mass of the particle (this means, within a cell
-        # partticles have the same area but may have different flow thickness which means a different mass)
+        # particles have the same area but may have different flow thickness which means a different mass)
         if massPerParticleDeterminationMethod == "MPPKR":
             mPartArray = rho * aPartArray * hPartArray
-        # create dictionnary to store particles properties
+        # create dictionary to store particles properties
         particles = {}
         particles["nPart"] = nPart
         particles["x"] = xPartArray
@@ -1653,7 +1653,11 @@ def initializeParticles(cfg, releaseLine, dem, inputSimLines="", logName="", rel
     particles["t"] = t
 
     relCells = np.size(indRelY)
-    partPerCell = particles["nPart"] / relCells
+    try:
+        partPerCell = particles["nPart"] / relCells
+    except ZeroDivisionError:
+        print(f"Could not divide by {relCells}")
+
 
     if massPerParticleDeterminationMethod != "MPPKR":
         # we need to set the nPPK
