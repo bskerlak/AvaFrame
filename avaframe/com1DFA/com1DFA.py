@@ -1658,7 +1658,6 @@ def initializeParticles(cfg, releaseLine, dem, inputSimLines="", logName="", rel
     except ZeroDivisionError:
         print(f"Could not divide by {relCells}")
 
-
     if massPerParticleDeterminationMethod != "MPPKR":
         # we need to set the nPPK
         aTot = np.sum(particles["m"] / (rho * particles["h"]))
