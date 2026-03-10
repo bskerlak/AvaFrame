@@ -1656,7 +1656,7 @@ def initializeParticles(cfg, releaseLine, dem, inputSimLines="", logName="", rel
     try:
         partPerCell = particles["nPart"] / relCells
     except ZeroDivisionError:
-        print(f"Could not divide by {relCells}")
+        raise ZeroDivisionError(f"Could not divide {particles["nPart"]} by {relCells}")
 
     if massPerParticleDeterminationMethod != "MPPKR":
         # we need to set the nPPK
