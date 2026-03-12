@@ -203,7 +203,7 @@ def writeReport(outDir, reportDictList, reportOneFile, plotDict='', standaloneRe
             # Loop through all simulations
             for reportD in reportDictList:
 
-                if plotDict != '' and ('simName' in reportD):
+                if plotDict != '' and plotDict is not None and ('simName' in reportD):
                     # add plot info to general report Dict
                     reportD['Simulation Results'] = plotDict[reportD['simName']['name']]
                     reportD['Simulation Results'].update({'type': 'image'})

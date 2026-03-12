@@ -473,6 +473,8 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
         cfg, outDir, demOri, inputSimLines, cuSimName
     )
     nPartInitial = particles["nPart"]
+    if nPartInitial == 0:
+        raise ValueError(f"Started simulation with {nPartInitial} particles")
 
     # add reportAreaInfo to inputSimLines
     inputSimLines["reportAreaInfo"] = reportAreaInfo
@@ -1256,7 +1258,9 @@ def initializeSimulation(cfg, outDir, demOri, inputSimLines, logName):
         releaseInfoDict, dem
     )
     relAreaProjected = np.sum(relAreaProjectedList)
-    relAreaActual = np.sum(relAreaActualList)
+    relAreaActual = np.sum(relAreaActualList)  # Bojan: includes slope, hence more than projected
+    if relAreaActual == 0:
+        raise ValueError(f"Relase area has 0m^2")
     reportAreaInfo = {
         "Release area info": {
             "Projected Area [m2]": "%.2f" % (relAreaProjected),
@@ -1661,14 +1665,21 @@ def initializeParticles(cfg, releaseLine, dem, inputSimLines="", logName="", rel
     if massPerParticleDeterminationMethod != "MPPKR":
         # we need to set the nPPK
         aTot = np.sum(particles["m"] / (rho * particles["h"]))
+        if particles["nPart"] == 0:
+            raise ValueError(f"No particles")
         # average number of particles per kernel radius
-        nPPK = particles["nPart"] * math.pi * csz**2 / aTot
+        try:
+            nPPK = particles["nPart"] * math.pi * csz**2 / aTot
+        except Exception:
+            raise ValueError(f"Error during division of {particles["nPart"] * math.pi * csz**2} by aTot = {aTot}")
     particles["nPPK"] = nPPK
 
     log.debug(
         "Initialized particles. MTot = %.2f kg, %s particles in %.2f cells."
         % (particles["mTot"], particles["nPart"], relCells)
     )
+    if (particles["mTot"] == 0) or (particles["nPart"] == 0):
+        raise ValueError(f"Initialized no particles or no mass")
     log.debug(
         "Mass per particle = %.2f kg and particles per cell = %.2f."
         % (particles["mTot"] / particles["nPart"], partPerCell)
@@ -3201,7 +3212,7 @@ def exportFields(
                     filename = resType
                 )
 
-            # TODO remove this later
+            # Bojan: I'm keeping this for now to ensure 100% consistency between ASCII output and Data Lake
             # This writes to raster file (same format as input  (defined by DEM header), hence here = .ASC)
             IOf.writeResultToRaster(
                 dem["originalHeader"], resField, outFile, flip=True, useCompression=useCompression

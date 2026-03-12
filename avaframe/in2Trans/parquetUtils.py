@@ -128,13 +128,8 @@ def raster_to_parquet_partitioned(
         "value": pa.array(v_flat, type=pa.float32()),
     }
 
-    # Drop NaNs (Bojan TODO if needed)
-    #mask = ~np.isnan(v_flat)  # TODO > threshold?
-    #table = pa.table({
-    #    "x": x_flat[mask],
-    #    "y": y_flat[mask],
-    #    "value": v_flat[mask],
-    #})
+    if (v_flat.max() == 0) and (v_flat.min() == 0):
+        raise ValueError(f"Output field for ASCII file {filename} is zero everywhere")
 
     # Build Arrow table with enforced schema
     table = pa.Table.from_pydict(data, schema=AVAFRAME_SCHEMA)

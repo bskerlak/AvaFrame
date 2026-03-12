@@ -825,7 +825,17 @@ def computeAreasFromRasterAndLine(line, dem):
     areaProjectedList = []
     areaActualList = []
     if line["initializedFrom"] == "shapefile":
-        line = geoTrans.prepareArea(line, dem, 0.01, combine=False, checkOverlap=False)
+        radius = 0.01
+        line = geoTrans.prepareArea(line, dem, radius, combine=False, checkOverlap=False)
+        n_nonzero_raster_cells = (line['rasterData'][0] > 0).sum()
+        if n_nonzero_raster_cells == 0:
+            print(f"rasterData is empty, need to extend radius to find grid points matching")
+            radius_delta = 0.1
+            while n_nonzero_raster_cells == 0:
+                radius += radius_delta
+                line = geoTrans.prepareArea(line, dem, radius, combine=False, checkOverlap=False)
+                n_nonzero_raster_cells = (line['rasterData'][0] > 0).sum()
+            print(f"rextended search radius to {radius} and found {n_nonzero_raster_cells} matching raster cells")
         rasterList = line["rasterData"]
     else:
         rasterList = [line["rasterData"]]

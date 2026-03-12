@@ -1170,7 +1170,7 @@ def prepareArea(line, dem, radius, thList="", combine=True, checkOverlap=True):
     dem : dict
         dictionary with dem information
     radius : float
-        include all cells which center is in the polygon or close enough
+        include all cells whose center is in the polygon or close enough
     thList: list
         thickness values for all features in the line dictionary
     combine : Boolean
@@ -1323,14 +1323,27 @@ def checkParticlesInRelease(particles, line, radius):
     particles : dict
         particles dictionary where particles outside of the polygon have been removed
     """
-    Mask = getParticlesInPolygon(particles, line, radius)
-    # also remove particles with negative mass
-    mask = np.where(particles["m"] <= 0, False, True)
-    Mask = np.logical_and(Mask, mask)
-    nRemove = len(Mask) - np.sum(Mask)
-    if nRemove > 0:
-        particles = particleTools.removePart(particles, Mask, nRemove, "")
-        log.debug("removed %s particles because they are not within the release polygon" % (nRemove))
+    n_particles = particles['nPart']
+    # point in polygon mask (tolerance = radius). False = to be removed.
+    keep_point_in_polygon = getParticlesInPolygon(particles, line, radius)
+    # negative mass mask
+    keep_mass = np.where(particles["m"] <= 0, False, True)
+    # combine masks
+    keep_particles = np.logical_and(keep_point_in_polygon, keep_mass)
+    n_particles_to_be_removed = len(keep_particles) - np.sum(keep_particles)
+    if n_particles_to_be_removed > 0:
+        if n_particles == n_particles_to_be_removed:
+            log.warning(f"all particles are due to be removed! increase tolerance for point in polygon")
+            n_particles_in_polygon = sum(keep_point_in_polygon)
+            while n_particles_in_polygon == 0:
+                    radius += 0.5
+                    keep_point_in_polygon = getParticlesInPolygon(particles, line, radius)
+                    n_particles_in_polygon = sum(keep_point_in_polygon)
+            log.debug(f"Had to increase search radius to {radius} to find at least one point in polygon (found {n_particles_in_polygon})")
+            keep_particles = np.logical_and(keep_point_in_polygon, keep_mass)
+            n_particles_to_be_removed = len(keep_particles) - np.sum(keep_particles)
+        particles = particleTools.removePart(particles, keep_particles, n_particles_to_be_removed, "")
+        log.debug("removed %s particles because they are not within the release polygon" % (n_particles_to_be_removed))
 
     return particles
 
