@@ -835,7 +835,7 @@ def computeAreasFromRasterAndLine(line, dem):
                 radius += radius_delta
                 line = geoTrans.prepareArea(line, dem, radius, combine=False, checkOverlap=False)
                 n_nonzero_raster_cells = (line['rasterData'][0] > 0).sum()
-            print(f"rextended search radius to {radius} and found {n_nonzero_raster_cells} matching raster cells")
+            print(f"extended search radius to {radius} and found {n_nonzero_raster_cells} matching raster cells")
         rasterList = line["rasterData"]
     else:
         rasterList = [line["rasterData"]]
