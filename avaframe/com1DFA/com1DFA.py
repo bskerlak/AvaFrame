@@ -474,7 +474,9 @@ def com1DFACore(cfg, avaDir, cuSimName, inputSimFiles, outDir, simHash=""):
     )
     nPartInitial = particles["nPart"]
     if nPartInitial == 0:
-        raise ValueError(f"Started simulation with {nPartInitial} particles")
+        error_msg = f"Started simulation with {nPartInitial} particles (output folder {outDir})"
+        log.error(error_msg)
+        raise ValueError(error_msg)
 
     # add reportAreaInfo to inputSimLines
     inputSimLines["reportAreaInfo"] = reportAreaInfo
@@ -1230,11 +1232,12 @@ def initializeSimulation(cfg, outDir, demOri, inputSimLines, logName):
         releaseLine = inputSimLines["releaseLine"]
         # create release area raster if not read from file
         if inputSimLines["releaseLine"]["initializedFrom"] == "shapefile":
-            # check if release features overlap between features
+            # check if release features overlap between features (returns an error if the case)
             geoTrans.prepareArea(releaseLine, dem, thresholdPointInPoly, combine=True, checkOverlap=True)
 
             # if no release thickness field or function - set release according to shapefile or ini file
             # this is a list of release rasters that we want to combine
+            # radius = sqrt(2) BOJAN: why?
             releaseLine = geoTrans.prepareArea(
                 releaseLine,
                 dem,
@@ -1515,6 +1518,8 @@ def initializeParticles(cfg, releaseLine, dem, inputSimLines="", logName="", rel
     partPerCell = np.zeros(np.shape(relRaster), dtype=np.int64)
     # find all non empty cells (meaning release area)
     indRelY, indRelX = np.nonzero(relRasterMask)
+    assert len(indRelX) > 0, f"ReleaseRasterMask is empty! {avaDir}"
+    assert len(indRelY) > 0, f"ReleaseRasterMask is empty! {avaDir}"
     if inputSimLines != "":
         indRelYReal, indRelXReal = np.nonzero(inputSimLines["releaseLine"]["rasterData"])
     else:
