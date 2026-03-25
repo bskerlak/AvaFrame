@@ -1294,6 +1294,16 @@ def polygon2Raster(demHeader, Line, radius, th=""):
     Y = Y.flatten()
     points = np.stack((X, Y), axis=-1)
     mask = path.contains_points(points, radius=r)
+    if mask.sum() == 0:
+        log.warning(f"Mask after using radius = {radius} yielded no results (points in polygon). Now trying with radius = 0.")
+        mask = path.contains_points(points, radius=0)
+        if mask.sum() == 0:
+            error_msg = f"Both for radius = {radius} and radius = 0, couldn't find points in polygon --> investigate!"
+            log.error(error_msg)
+            raise AssertionError(error_msg)
+        else:
+            log.warning(f"Worked for radius = 0. Still strange. Check CW vs CCW orientation of polygon.")
+
     Mask = mask.reshape((nrows, ncols)).astype(int)
     # thickness field is provided, then return array with ones
     if th != "":
