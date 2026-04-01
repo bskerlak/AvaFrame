@@ -20,3 +20,26 @@ build/
 # Ignore hidden system files
 .DS_Store
 .env
+
+# AvaFrame
+.venv
+.github
+.glty
+tinyHelper/
+benchmarks/
+avaframe.egg-info/
+avaframe/ana1Tests/
+avaframe/ana3AIMEC/
+avaframe/ana4Stats/
+avaframe/ana2AB/
+avaframe/ana3Hybrid/
+avaframe/ana4FlowPy/
+avaframe/ana5SnowSlide/
+avaframe/ana6RockAvalanche/
+avaframe/ana7Regional/
+avaframe/ana8MoTPSA/
+avaframe/ana9MoTVoellmy/
+data/
+avaframe/log2Report/
+avaframe/out3Plot/
+avaframe/tmp1Ex/
