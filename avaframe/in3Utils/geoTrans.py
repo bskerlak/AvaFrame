@@ -1188,7 +1188,7 @@ def prepareArea(line, dem, radius, thList="", combine=True, checkOverlap=True):
     updates the line dictionary with the rasterData:
         contains either
 
-        -  Raster: 2D numpy array, raster of the area (returned if relRHlist is empty OR if combine is set
+        - Raster: 2D numpy array, raster of the area (returned if relRHlist is empty OR if combine is set
         to True)
         - RasterList: list, list of 2D numpy array rasters (returned if relRHlist is not empty AND
         if combine is set to False)
@@ -1270,6 +1270,14 @@ def polygon2Raster(demHeader, Line, radius, th=""):
     xllc = demHeader["xllcenter"]
     yllc = demHeader["yllcenter"]
     csz = demHeader["cellsize"]
+
+    x = np.linspace(0, ncols - 1, ncols)
+    y = np.linspace(0, nrows - 1, nrows)
+    X, Y = np.meshgrid(x, y)
+    X = X.flatten()
+    Y = Y.flatten()
+
+    points = np.stack((X, Y), axis=-1)
     xCoord0 = (Line["x"] - xllc) / csz
     yCoord0 = (Line["y"] - yllc) / csz
     if (xCoord0[0] == xCoord0[-1]) and (yCoord0[0] == yCoord0[-1]):
@@ -1277,7 +1285,7 @@ def polygon2Raster(demHeader, Line, radius, th=""):
         yCoord = np.delete(yCoord0, -1)
     else:
         xCoord = copy.deepcopy(xCoord0)
-        yCoord = copy.deepcopy(yCoord0)
+        yCoord = copy.deepcopy(yCoord0)    
 
     # get the raster corresponding to the polygon
     polygon = np.stack((xCoord, yCoord), axis=-1)
@@ -1286,24 +1294,18 @@ def polygon2Raster(demHeader, Line, radius, th=""):
     # for this we need to know if the path is clockwise or counterclockwise
     # to decide if the radius should be positive or negative in contains_points
     is_ccw = isCounterClockWise(path)
-    r = radius * is_ccw - radius * (1 - is_ccw)
-    x = np.linspace(0, ncols - 1, ncols)
-    y = np.linspace(0, nrows - 1, nrows)
-    X, Y = np.meshgrid(x, y)
-    X = X.flatten()
-    Y = Y.flatten()
-    points = np.stack((X, Y), axis=-1)
-    mask = path.contains_points(points, radius=r)
-    if mask.sum() == 0:
-        log.warning(f"Mask after using radius = {radius} yielded no results (points in polygon). Now trying with radius = 0.")
-        mask = path.contains_points(points, radius=0)
-        if mask.sum() == 0:
-            error_msg = f"Both for radius = {radius} and radius = 0, couldn't find points in polygon --> investigate!"
-            log.error(error_msg)
-            raise AssertionError(error_msg)
-        else:
-            log.warning(f"Worked for radius = 0. Still strange. Check CW vs CCW orientation of polygon.")
-
+    initial_radius = radius
+    while True:
+        r = radius * is_ccw - radius * (1 - is_ccw)
+        mask = path.contains_points(points, radius=r)
+        if np.any(mask):
+            if radius != initial_radius:
+                log.warning(f"DEBUG: Had to increase search radius to {radius} to find at least one cell. Found {mask.sum()} cells.")
+            break
+        radius += 0.5
+        if radius > 10: 
+            raise ValueError("Radius expanded to 10m and still no points found. Check coordinates!")
+    
     Mask = mask.reshape((nrows, ncols)).astype(int)
     # thickness field is provided, then return array with ones
     if th != "":

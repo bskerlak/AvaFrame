@@ -1233,7 +1233,13 @@ def initializeSimulation(cfg, outDir, demOri, inputSimLines, logName):
         # create release area raster if not read from file
         if inputSimLines["releaseLine"]["initializedFrom"] == "shapefile":
             # check if release features overlap between features (returns an error if the case)
-            geoTrans.prepareArea(releaseLine, dem, thresholdPointInPoly, combine=True, checkOverlap=True)
+            geoTrans.prepareArea(
+                releaseLine,
+                dem,
+                thresholdPointInPoly,
+                combine=True,
+                checkOverlap=True
+            )
 
             # if no release thickness field or function - set release according to shapefile or ini file
             # this is a list of release rasters that we want to combine
@@ -3191,11 +3197,6 @@ def exportFields(
                         if y_match:
                             Y_value = y_match.group(1)
                             continue
-
-                    if item == "Anriss0005":
-                        X_value = 2608198
-                        Y_value = 1145230
-                        area_value = 200
 
                 # 2. Safety Checks
                 assert area_value is not None, f"Could not find Area (Axxx) in: {outDir.parents[1].name}"
