@@ -8,8 +8,8 @@ import pyarrow.parquet as pq
 log = logging.getLogger("com1DFA")
 
 AVAFRAME_SCHEMA = pa.schema([
-    pa.field("X_rel_center", pa.int64(), nullable=False),
-    pa.field("Y_rel_center", pa.int64(), nullable=False),
+    pa.field("X_rel_center", pa.float64(), nullable=False),
+    pa.field("Y_rel_center", pa.float64(), nullable=False),
     pa.field("area", pa.int16(), nullable=False),
     pa.field("relTh", pa.float32(), nullable=False),
     pa.field("mu", pa.float32(), nullable=False),
@@ -25,8 +25,8 @@ def calculate_anchored_checksum(x_flat, y_flat, v_flat, x0, y0, precision=1e6, r
     Calculates a spatial checksum based on relative grid indices.
     Accepts raw numpy arrays for performance.
     """
-    x0 = int(x0)
-    y0 = int(y0)
+    x0 = np.round(float(x0)).astype(np.int64)
+    y0 = np.round(float(y0)).astype(np.int64)
 
     # 1. Calculate indices relative to the fixed anchor (Release Center)
     x_idx = np.round((x_flat - x0) / res).astype(np.int64)
@@ -49,6 +49,7 @@ def raster_to_parquet_partitioned(
         header,
         field,
         outdir,
+        id_anriss,
         X,
         Y,
         area,
@@ -80,6 +81,7 @@ def raster_to_parquet_partitioned(
     # --- Parquet partition path (Hive-style) ---
     parquet_partitioned_dir = (
         outdir
+        / f"id_anriss={id_anriss}"
         / f"X_rel_center={X}"
         / f"Y_rel_center={Y}"
         / f"area={area}"
@@ -116,8 +118,8 @@ def raster_to_parquet_partitioned(
     # Build the data dictionary with explicit casting
     # We create full arrays for the partitioning columns so they aren't "dictionaries"
     data = {
-        "X_rel_center": pa.array(np.full(num_rows, X, dtype=np.int64), type=pa.int64()),
-        "Y_rel_center": pa.array(np.full(num_rows, Y, dtype=np.int64), type=pa.int64()),
+        "X_rel_center": pa.array(np.full(num_rows, X, dtype=np.float64), type=pa.float64()),
+        "Y_rel_center": pa.array(np.full(num_rows, Y, dtype=np.float64), type=pa.float64()),
         "area": pa.array(np.full(num_rows, area, dtype=np.int16), type=pa.int16()),
         "relTh": pa.array(np.full(num_rows, relTh, dtype=np.float32), type=pa.float32()),
         "mu": pa.array(np.full(num_rows, mu, dtype=np.float32), type=pa.float32()),

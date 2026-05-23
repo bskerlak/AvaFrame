@@ -56,3 +56,5 @@ avaframe/com1DFA/*.so
 /wheelhouse/
 
 .Dockerfile.swp
+*.csv
+*.log

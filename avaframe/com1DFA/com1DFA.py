@@ -3167,11 +3167,13 @@ def exportFields(
                 results_root_dir = outDir.parents[2] / "batch_data_lake_bronze"
                 fU.makeADir(results_root_dir)
 
-                # special for X, Y and Area due to new coordinates first logic
+                # get id_anriss, X, Y and Area from folder name (not ideal)
                 folder_list = str(outDir.parents[1].name).split("_")
+                id_anriss = folder_list[1]
+                int(id_anriss)  # throws ValueError if something superstrange has happened
                 re_area = re.compile(r'^A(\d+)$')
-                re_x = re.compile(r'^X(\d+)$')
-                re_y = re.compile(r'^Y(\d+)$')
+                re_x = re.compile(r'^X(\d+(?:\.\d+)?)$')
+                re_y = re.compile(r'^Y(\d+(?:\.\d+)?)$')
                 area_value = None
                 X_value = None
                 Y_value = None
@@ -3208,6 +3210,7 @@ def exportFields(
                     dem["originalHeader"],
                     resField,
                     results_root_dir,
+                    id_anriss = id_anriss,
                     X = X_value,
                     Y = Y_value,
                     area = area_value,
