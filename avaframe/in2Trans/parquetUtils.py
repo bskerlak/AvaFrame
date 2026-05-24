@@ -77,6 +77,9 @@ def raster_to_parquet_partitioned(
         Create plot?
     """
 
+    # CAUTION: Convert relTh back to [cm]
+    relTh = int(float(relTh)*100)
+
     outdir = Path(outdir)
     # --- Parquet partition path (Hive-style) ---
     parquet_partitioned_dir = (
