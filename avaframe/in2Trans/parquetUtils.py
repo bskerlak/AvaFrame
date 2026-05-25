@@ -11,7 +11,7 @@ AVAFRAME_SCHEMA = pa.schema([
     pa.field("X_rel_center", pa.float64(), nullable=False),
     pa.field("Y_rel_center", pa.float64(), nullable=False),
     pa.field("area", pa.int16(), nullable=False),
-    pa.field("relTh", pa.float32(), nullable=False),
+    pa.field("relTh", pa.int16(), nullable=False),
     pa.field("mu", pa.float32(), nullable=False),
     pa.field("xsi", pa.int16(), nullable=False),
     pa.field("tau0", pa.int16(), nullable=False),
@@ -73,8 +73,6 @@ def raster_to_parquet_partitioned(
         Base directory for results.
     filename : str
         Output Parquet filename
-    plot : bool
-        Create plot?
     """
 
     # CAUTION: Convert relTh back to [cm]
@@ -124,7 +122,7 @@ def raster_to_parquet_partitioned(
         "X_rel_center": pa.array(np.full(num_rows, X, dtype=np.float64), type=pa.float64()),
         "Y_rel_center": pa.array(np.full(num_rows, Y, dtype=np.float64), type=pa.float64()),
         "area": pa.array(np.full(num_rows, area, dtype=np.int16), type=pa.int16()),
-        "relTh": pa.array(np.full(num_rows, relTh, dtype=np.float32), type=pa.float32()),
+        "relTh": pa.array(np.full(num_rows, relTh, dtype=np.int16), type=pa.int16()),
         "mu": pa.array(np.full(num_rows, mu, dtype=np.float32), type=pa.float32()),
         "xsi": pa.array(np.full(num_rows, xsi, dtype=np.int16), type=pa.int16()),
         "tau0": pa.array(np.full(num_rows, tau0, dtype=np.int16), type=pa.int16()),
