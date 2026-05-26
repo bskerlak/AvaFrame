@@ -76,7 +76,8 @@ def raster_to_parquet_partitioned(
     """
 
     # CAUTION: Convert relTh back to [cm]
-    relTh = int(float(relTh)*100)
+    # CAUTION: int() rounds down, so e.g. 56.999999 gets converted to 56 instead of 57 --> add np.round
+    relTh = int(np.round(float(relTh)*100,0))
 
     outdir = Path(outdir)
     # --- Parquet partition path (Hive-style) ---
