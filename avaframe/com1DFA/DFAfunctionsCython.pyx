@@ -625,7 +625,7 @@ cdef (double, double, double) addArtificialViscosity(double m, double h, double 
       row of the nearest lower left cell
   w: float[4]
       corresponding weights
-      location in the y location of desiered interpolation
+      location in the y location of desired interpolation
   VX: 2D numpy array
       x component of the velocity vector field at the grid nodes
   VY: 2D numpy array

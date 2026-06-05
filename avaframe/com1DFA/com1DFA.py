@@ -2203,8 +2203,8 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
     log.debug("Saving results for time step t = %f s", t)
 
     # export initial time step
-    if cfg["BOJAN"].getboolean("skipExportDataInitial"):
-        log.debug("BOJAN: Skipping initial timestep data export (skipExportDataInitial)")
+    if cfg["BOJAN"].getboolean("skipExportDatatSteps"):
+        log.debug("BOJAN: Skipping initial timestep data export (skipExportDatatSteps)")
     else:
         exportFields(cfg, t, fields, dem, outDir, cuSimName, TSave="initial")
 
@@ -2292,7 +2292,7 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
         log.debug(f"time step t = {t:0.2f} s")
 
         # create range time diagram
-        # determine avalanche front and flow characteristics in respective coodrinate system
+        # determine avalanche front and flow characteristics in respective coordinate system
         if cfg["VISUALISATION"].getboolean("createRangeTimeDiagram") and t >= dtRangeTime[0]:
             mtiInfo, dtRangeTime = dtAna.fetchRangeTimeInfo(
                 cfgRangeTime, cfg, dtRangeTime, t, demRT["header"], fields, mtiInfo
@@ -2341,6 +2341,11 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
                     countParticleCsv=countParticleCsv,
                 )
                 countParticleCsv = countParticleCsv + 1
+
+            # write max trajectory length at each save step
+            maxTrajLengthXYCor = np.nanmax(particles["trajectoryLengthXYCor"])
+            with open(outDir / "maxTrajLengthXYCor.csv", "a", encoding="utf-8") as f:
+                f.write(f"{t},{maxTrajLengthXYCor}\n")
 
             # remove saving time steps that have already been saved
             dtSave = updateSavingTimeStep(dtSave, cfg["GENERAL"], t)
