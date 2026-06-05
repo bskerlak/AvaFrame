@@ -2342,10 +2342,12 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
                 )
                 countParticleCsv = countParticleCsv + 1
 
-            # write max trajectory length at each save step
-            maxTrajLengthXYCor = np.nanmax(particles["trajectoryLengthXYCor"])
-            with open(outDir / "maxTrajLengthXYCor.csv", "a", encoding="utf-8") as f:
-                f.write(f"{t},{maxTrajLengthXYCor}\n")
+            if cfg["BOJAN"].getboolean("writeTrajectoryLengthXYCor"):
+                # export trajectory length in x and y direction for all particles to csv file
+                trajLengthXYCor = particles["trajectoryLengthXYCor"]
+                with open(outDir / "trajectoryLengthXYCor.csv", "a", encoding="utf-8") as f:
+                    for trajLength in trajLengthXYCor:
+                        f.write(f"{t},{trajLength}\n")
 
             # remove saving time steps that have already been saved
             dtSave = updateSavingTimeStep(dtSave, cfg["GENERAL"], t)
