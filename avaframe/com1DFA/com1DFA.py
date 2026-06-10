@@ -2275,18 +2275,19 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
         if cfg["BOJAN"].getboolean("noSlideCriterion", fallback=False):
             t_no_slide = cfg["BOJAN"].getfloat("noSlideTime")
             dist_no_slide = cfg["BOJAN"].getfloat("noSlideDist")
-            if t > t_no_slide and np.max(particles["trajectoryLengthXYCor"]) < dist_no_slide:
+            max_path = np.nanmax(particles["trajectoryLengthXYCor"])
+            if t > t_no_slide and max_path < dist_no_slide:
                 particles["iterate"] = False
                 particles["stopReason"] = "noSlide"
                 log.info(
-                    "Stop (noSlide): relTh=%.2f m, mu=%.2f, xsi=%.2f, tau0=%.2f -> no particle traveled more than %.1f m after %.1f s (max path = %.2f m)",
+                    "Stop (noSlide): relTh=%.2f m, mu=%.3f, xsi=%d, tau0=%d -> no particle traveled more than %.1f m after %.1f s (max path = %.2f m)",
                     cfg["GENERAL"].getfloat("relTh"),
                     cfg["GENERAL"].getfloat("muvoellmyminshear"),
-                    cfg["GENERAL"].getfloat("xsivoellmyminshear"),
-                    cfg["GENERAL"].getfloat("tau0voellmyminshear"),
+                    int(cfg["GENERAL"].getfloat("xsivoellmyminshear")),
+                    int(cfg["GENERAL"].getfloat("tau0voellmyminshear")),
                     dist_no_slide,
                     t,
-                    np.max(particles["trajectoryLengthXYCor"]),
+                    max_path,
                 )
         # set max values of fields to dataframe
         if cfg["VISUALISATION"].getboolean("createRangeTimeDiagram"):
