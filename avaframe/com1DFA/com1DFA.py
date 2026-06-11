@@ -2247,9 +2247,20 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
         # get time step
         dt = cfgGen.getfloat("dt")
     particles["dt"] = dt
+
+    # #########################
+    # Start loop t --> t + dt
+    # #########################
     t = t + dt
 
-    # Start time step computation
+    if cfg["BOJAN"].getboolean("noSlideCriterion", fallback=False):
+        # only read configuration settings for no-slide criterion once at the beginning of the simulation (instead of at each time step in the loop)
+        t_no_slide = cfg["BOJAN"].getfloat("noSlideTime")
+        dist_no_slide = cfg["BOJAN"].getfloat("noSlideDist")
+        bojan_no_slide = True
+    else:
+        bojan_no_slide = False
+
     while t <= tEnd * (1.0 + 1.0e-13) and particles["iterate"]:
         startTime = time.time()
         log.debug("Computing time step t = %f s, dt = %f s" % (t, dt))
@@ -2258,7 +2269,7 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
             particles, fields, zPartArray0 = debF.releaseHydrograph(
                 cfg, inputSimLines, particles, fields, dem, zPartArray0, t
             )
-        # Perform computations
+        # A) Perform computations
         particles, fields, zPartArray0, tCPU, dem = computeEulerTimeStep(
             cfgGen,
             particles,
@@ -2270,13 +2281,13 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
             resistanceType,
             inputSimLines["reportAreaInfo"],
         )
-        # no-slide stop criterion: stop if no particle has traveled more than
-        # noSlideDist after noSlideTime seconds
-        if cfg["BOJAN"].getboolean("noSlideCriterion", fallback=False):
-            t_no_slide = cfg["BOJAN"].getfloat("noSlideTime")
-            dist_no_slide = cfg["BOJAN"].getfloat("noSlideDist")
-            max_path = np.nanmax(particles["trajectoryLengthXYCor"])
-            if t > t_no_slide and max_path < dist_no_slide:
+        # B) no-slide stop criterion: stop if no particle has traveled more than noSlideDist after noSlideTime seconds
+        # this is to avoid long computations with very slow particles that do not contribute to the flow anymore
+        if bojan_no_slide and particles['iterate']:  # this criterion is only useful if the particles are still iterating
+            max_path = float(np.nanmax(particles["trajectoryLengthXYCor"]))
+            assert not np.isnan(max_path), f"max_path should not be nan, but got {max_path}"
+            assert max_path >= 0, f"max_path should be non-negative, but got {max_path}"
+            if t > t_no_slide and (not np.isnan(max_path)) and max_path < dist_no_slide:
                 particles["iterate"] = False
                 particles["stopReason"] = "noSlide"
                 log.info(
@@ -2289,9 +2300,9 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
                     t,
                     max_path,
                 )
-        # set max values of fields to dataframe
+        # C) Update particles, Visualization, Report, Logging
         if cfg["VISUALISATION"].getboolean("createRangeTimeDiagram"):
-            rangeValue = mtiInfo["rangeList"][-1]
+            rangeValue = mtiInfo["rangeList"][-1]  # set max values of fields to dataframe
         else:
             rangeValue = ""
         resultsDF = addMaxValuesToDF(resultsDF, fields, t, resTypesLast, rangeValue=rangeValue)
@@ -2382,11 +2393,24 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
             dt = cfgGen.getfloat("dt")
         particles["dt"] = dt
 
+        # D) increase time and counters
         t = t + dt
         nIter = nIter + 1
         nIter0 = nIter0 + 1
         tCPUtimeLoop = time.time() - startTime
         tCPU["timeLoop"] = tCPU["timeLoop"] + tCPUtimeLoop
+
+        # E) Bojan: additional info for max path
+        try:
+            max_path = float(np.nanmax(particles["trajectoryLengthXYCor"]))
+        except Exception:
+            # if there's no more particles left, the trajectory length array might be empty, which would cause an error when trying to compute the max.
+            # just keep it at the previous max_path
+            pass 
+
+    # #########################
+    # End loop t --> t + dt
+    # #########################
     tCPU["nIter"] = nIter
     log.debug("Ending computation at time t = %f s (PID: %s Thread %s)", t - dt, os.getpid(), threading.current_thread().ident)    
     log.debug("Saving results for time step t = %f s", t - dt)
@@ -2435,38 +2459,48 @@ def DFAIterate(cfg, particles, fields, dem, inputSimLines, outDir, cuSimName, si
         "pfvTimeMax": pfvTimeMax,
     }
 
-    # determine if stop criterion is reached or end time
+    # Report on stop criterion: determine if stop criterion is reached (particles["iterate"] = False) or end time is reached (particles["iterate"] = True) and derive stopping info for report
+    # particles["iterate"] essentially says: "should the simulation continue to iterate (True) or should it stop (False)?".
     stopCritNotReached = particles["iterate"]
     avaTime = particles["t"]
-    stopCritPer = cfgGen.getfloat("stopCrit") * 100.0
-    # update info dict with stopping info for report
+    stopReason = particles.get("stopReason", "")
     if stopCritNotReached:
-        infoDict.update(
-            {
-                "stopInfo": {
-                    "Stop criterion": "end Time reached: %.2f" % avaTime,
-                    "Avalanche run time [s]": "%.2f" % avaTime,
-                }
-            }
-        )
-    elif particles.get("stopReason") == "noSlide":
-        infoDict.update(
-            {
-                "stopInfo": {
-                    "Stop criterion": "noSlide: max path < %.1f m after %.1f s" % (cfg["BOJAN"].getfloat("noSlideDist"), cfg["BOJAN"].getfloat("noSlideTime")),
-                    "Avalanche run time [s]": "%.2f" % avaTime,
-                }
-            }
-        )
+        stopInfo = {
+            "Stop criterion": "end Time reached: %.2f" % avaTime,
+            "Avalanche run time [s]": "%.2f" % avaTime,
+            "Max path [m]": "%.2f" % max_path,
+        }
+    elif stopReason == "noSlide":
+        # Bojan: this is our custom no-slide criterion. particles['iterate'] is set to False when this criterion is reached, 
+        # and we also set a stopReason = 'noSlide' to be able to report on it in the infoDict.
+        stopInfo = {
+            "Stop criterion": "noSlide: max path < %.1f m after %.1f s" % (cfg["BOJAN"].getfloat("noSlideDist"), cfg["BOJAN"].getfloat("noSlideTime")),
+            "Avalanche run time [s]": "%.2f" % avaTime,
+            "Max path [m]": "%.2f" % max_path,
+        }
+    elif stopReason:
+        stopInfo = {
+            "Stop criterion": stopReason,
+            "Avalanche run time [s]": "%.2f" % avaTime,
+            "Max path [m]": "%.2f" % max_path,
+        }
     else:
-        infoDict.update(
-            {
-                "stopInfo": {
-                    "Stop criterion": "< %.2f percent of PKE" % stopCritPer,
-                    "Avalanche run time [s]": "%.2f" % avaTime,
-                }
-            }
-        )
+        stopCritType = cfg["GENERAL"].get("stopCritType", "").strip()
+        stopCrit = cfg["GENERAL"].getfloat("stopCrit", fallback=np.nan)
+        if stopCritType == "kinEnergy":
+            stopReason = "kinEnergy <= %.2f * peak kinetic energy" % stopCrit
+        elif stopCritType == "massFlowing":
+            stopReason = "massFlowing <= %.2f * peak flowing mass" % stopCrit
+        else:
+            log.error("Unexpected stop reason: %s. Check the code." % stopReason)
+            raise ValueError("Unexpected stop reason: %s. Check the code." % stopReason)
+        stopInfo = {
+            "Stop criterion": stopReason,
+            "Avalanche run time [s]": "%.2f" % avaTime,
+            "Max path [m]": "%.2f" % max_path,
+        }
+
+    infoDict.update({"stopInfo": stopInfo})
 
     # create range time diagram
     # export data for range-time diagram
